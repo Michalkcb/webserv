@@ -1,0 +1,36 @@
+#!/usr/bin/env python3
+import os
+import sys
+
+# Send CGI headers
+sys.stdout.write("Status: 200 OK\r\n")
+sys.stdout.write("Content-Type: text/plain\r\n")
+sys.stdout.write("\r\n")  # End headers
+sys.stdout.flush()
+
+# Read all input and echo it back
+try:
+    content_length = int(os.environ.get('CONTENT_LENGTH', 0))
+    data = b""
+    
+    if content_length > 0:
+        # Read exactly content_length bytes
+        remaining = content_length
+        while remaining > 0:
+            chunk = sys.stdin.buffer.read(min(remaining, 8192))
+            if not chunk:
+                break
+            data += chunk
+            remaining -= len(chunk)
+    else:
+        # No content length, read until EOF
+        data = sys.stdin.buffer.read()
+    
+    # Echo back all the data we read
+    sys.stdout.buffer.write(data)
+    sys.stdout.buffer.flush()
+    
+except Exception as e:
+    error_msg = f"Error: {e}\r\nCONTENT_LENGTH={os.environ.get('CONTENT_LENGTH', 'unset')}\r\nREQUEST_METHOD={os.environ.get('REQUEST_METHOD', 'unset')}\r\n"
+    sys.stdout.buffer.write(error_msg.encode('utf-8'))
+    sys.stdout.buffer.flush()

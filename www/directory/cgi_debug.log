@@ -1,0 +1,1704 @@
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 1000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 1000
+Actual bytes read from stdin: 1000
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 1000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 1000
+Actual bytes read from stdin: 1000
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 1000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 1000
+Actual bytes read from stdin: 1000
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 1000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 1000
+Actual bytes read from stdin: 1000
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 1000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 1000
+Actual bytes read from stdin: 1000
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 1000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 1000
+Actual bytes read from stdin: 1000
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 1000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 1000
+Actual bytes read from stdin: 1000
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 100000000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 100000000
+Actual bytes read from stdin: 0
+Execution time: 37486 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 1000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 1000
+Actual bytes read from stdin: 1000
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 1000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 1000
+Actual bytes read from stdin: 1000
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 1000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 1000
+Actual bytes read from stdin: 1000
+Execution time: 1 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 1000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 1000
+Actual bytes read from stdin: 1000
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 1000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 1000
+Actual bytes read from stdin: 1000
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 1000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 1000
+Actual bytes read from stdin: 1000
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 1000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 1000
+Actual bytes read from stdin: 1000
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 1000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 1000
+Actual bytes read from stdin: 1000
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 1000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 1000
+Actual bytes read from stdin: 1000
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 100000000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 100000000
+Actual bytes read from stdin: 0
+Execution time: 39468 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 1000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 1000
+Actual bytes read from stdin: 1000
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 100000000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 100000000
+Actual bytes read from stdin: 0
+Execution time: 38303 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 1000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 1000
+Actual bytes read from stdin: 1000
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 100000000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 100000000
+Actual bytes read from stdin: 0
+Execution time: 39620 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 1000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 1000
+Actual bytes read from stdin: 1000
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: GET
+CONTENT_LENGTH: undefined
+CONTENT_TYPE: 
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 0
+Actual bytes read from stdin: 0
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: GET
+CONTENT_LENGTH: undefined
+CONTENT_TYPE: 
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 0
+Actual bytes read from stdin: 0
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: undefined
+CONTENT_TYPE: 
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 0
+Actual bytes read from stdin: 0
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 1000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 1000
+Actual bytes read from stdin: 1000
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 1000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 1000
+Actual bytes read from stdin: 1000
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 1000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 1000
+Actual bytes read from stdin: 1000
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 1000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 1000
+Actual bytes read from stdin: 1000
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 1000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 1000
+Actual bytes read from stdin: 1000
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 1000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 1000
+Actual bytes read from stdin: 1000
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 1000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 1000
+Actual bytes read from stdin: 1000
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 1000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 1000
+Actual bytes read from stdin: 1000
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 1000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 1000
+Actual bytes read from stdin: 1000
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 1000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 1000
+Actual bytes read from stdin: 1000
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 1000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 1000
+Actual bytes read from stdin: 1000
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 1000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 1000
+Actual bytes read from stdin: 1000
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 1000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 1000
+Actual bytes read from stdin: 1000
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 1000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 1000
+Actual bytes read from stdin: 1000
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: GET
+CONTENT_LENGTH: undefined
+CONTENT_TYPE: 
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 0
+Actual bytes read from stdin: 0
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: GET
+CONTENT_LENGTH: undefined
+CONTENT_TYPE: 
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 0
+Actual bytes read from stdin: 0
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: undefined
+CONTENT_TYPE: 
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 0
+Actual bytes read from stdin: 0
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 1000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 1000
+Actual bytes read from stdin: 1000
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 1000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 1000
+Actual bytes read from stdin: 1000
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 1000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 1000
+Actual bytes read from stdin: 1000
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 1000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 1000
+Actual bytes read from stdin: 1000
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 1000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 1000
+Actual bytes read from stdin: 1000
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 1000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 1000
+Actual bytes read from stdin: 1000
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 0
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 0
+Actual bytes read from stdin: 0
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 1000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 1000
+Actual bytes read from stdin: 1000
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 1000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 1000
+Actual bytes read from stdin: 1000
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 1000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 1000
+Actual bytes read from stdin: 1000
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 1000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 1000
+Actual bytes read from stdin: 1000
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 1000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 1000
+Actual bytes read from stdin: 1000
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 10
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 10
+Actual bytes read from stdin: 10
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 100000000
+CONTENT_TYPE: application/octet-stream
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 100000000
+Actual bytes read from stdin: 61425
+Execution time: 119729 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 4
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 4
+Actual bytes read from stdin: 4
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 5
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 5
+Actual bytes read from stdin: 5
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: GET
+CONTENT_LENGTH: undefined
+CONTENT_TYPE: 
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 0
+Actual bytes read from stdin: 0
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: undefined
+CONTENT_TYPE: 
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 0
+Actual bytes read from stdin: 0
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 100000000
+CONTENT_TYPE: application/octet-stream
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 100000000
+Actual bytes read from stdin: 16380
+Execution time: 59787 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: GET
+CONTENT_LENGTH: undefined
+CONTENT_TYPE: 
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 0
+Actual bytes read from stdin: 0
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: undefined
+CONTENT_TYPE: test/file
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 0
+Actual bytes read from stdin: 196608
+Execution time: 14867 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 9
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 9
+Actual bytes read from stdin: 9
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 0
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 0
+Actual bytes read from stdin: 0
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 10485760
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 10485760
+Actual bytes read from stdin: 8190
+Execution time: 29998 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 10485760
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 10485760
+Actual bytes read from stdin: 20475
+Execution time: 20001 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 15
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 15
+Actual bytes read from stdin: 15
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 10485760
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 10485760
+Actual bytes read from stdin: 16380
+Execution time: 14994 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 10485760
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 10485760
+Actual bytes read from stdin: 12285
+Execution time: 24999 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 102400
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 102400
+Actual bytes read from stdin: 20305
+Execution time: 9996 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 102400
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 102400
+Actual bytes read from stdin: 20305
+Execution time: 10000 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 102400
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 102400
+Actual bytes read from stdin: 12115
+Execution time: 9982 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 10240
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 10240
+Actual bytes read from stdin: 10240
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 51200
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 51200
+Actual bytes read from stdin: 16211
+Execution time: 9988 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 20480
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 20480
+Actual bytes read from stdin: 20480
+Execution time: 2 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 30720
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 30720
+Actual bytes read from stdin: 20306
+Execution time: 9987 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 25600
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 25600
+Actual bytes read from stdin: 16211
+Execution time: 9988 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 25601
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 25601
+Actual bytes read from stdin: 16211
+Execution time: 9990 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: GET
+CONTENT_LENGTH: undefined
+CONTENT_TYPE: 
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 0
+Actual bytes read from stdin: 0
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: GET
+CONTENT_LENGTH: undefined
+CONTENT_TYPE: 
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 0
+Actual bytes read from stdin: 0
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: undefined
+CONTENT_TYPE: 
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 0
+Actual bytes read from stdin: 0
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 25600
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 25600
+Actual bytes read from stdin: 20306
+Execution time: 9997 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 30721
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 30721
+Actual bytes read from stdin: 20306
+Execution time: 9986 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 21504
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 21504
+Actual bytes read from stdin: 16211
+Execution time: 9988 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 21504
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 21504
+Actual bytes read from stdin: 21504
+Execution time: 5 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 102400
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 102400
+Actual bytes read from stdin: 102400
+Execution time: 21 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 10485760
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 10485760
+Actual bytes read from stdin: 10485760
+Execution time: 2587 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: GET
+CONTENT_LENGTH: undefined
+CONTENT_TYPE: 
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 0
+Actual bytes read from stdin: 0
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: undefined
+CONTENT_TYPE: 
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 0
+Actual bytes read from stdin: 0
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 10485760
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 10485760
+Actual bytes read from stdin: 10485760
+Execution time: 3065 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 9
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 9
+Actual bytes read from stdin: 9
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 100000000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 100000000
+Actual bytes read from stdin: 100000000
+Execution time: 14989 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 100000000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 100000000
+Actual bytes read from stdin: 100000000
+Execution time: 13765 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: GET
+CONTENT_LENGTH: undefined
+CONTENT_TYPE: 
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 0
+Actual bytes read from stdin: 0
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: undefined
+CONTENT_TYPE: test/file
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 0
+Actual bytes read from stdin: 131072
+Execution time: 64228 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 1048576
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 1048576
+Actual bytes read from stdin: 1048576
+Execution time: 219 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 100000000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 100000000
+Actual bytes read from stdin: 100000000
+Execution time: 18185 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: GET
+CONTENT_LENGTH: undefined
+CONTENT_TYPE: 
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 0
+Actual bytes read from stdin: 0
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: undefined
+CONTENT_TYPE: 
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 0
+Actual bytes read from stdin: 0
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 100000000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 100000000
+Actual bytes read from stdin: 100000000
+Execution time: 19181 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 4
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 4
+Actual bytes read from stdin: 4
+Execution time: 1 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 100000000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 100000000
+Actual bytes read from stdin: 100000000
+Execution time: 13384 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: GET
+CONTENT_LENGTH: undefined
+CONTENT_TYPE: 
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 0
+Actual bytes read from stdin: 0
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: undefined
+CONTENT_TYPE: 
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 0
+Actual bytes read from stdin: 0
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 100000000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 100000000
+Actual bytes read from stdin: 100000000
+Execution time: 13151 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: GET
+CONTENT_LENGTH: undefined
+CONTENT_TYPE: 
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 0
+Actual bytes read from stdin: 0
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: undefined
+CONTENT_TYPE: 
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 0
+Actual bytes read from stdin: 0
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 100000000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 100000000
+Actual bytes read from stdin: 100000000
+Execution time: 12345 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: GET
+CONTENT_LENGTH: undefined
+CONTENT_TYPE: 
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 0
+Actual bytes read from stdin: 0
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: undefined
+CONTENT_TYPE: 
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 0
+Actual bytes read from stdin: 0
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: GET
+CONTENT_LENGTH: undefined
+CONTENT_TYPE: 
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 0
+Actual bytes read from stdin: 0
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: undefined
+CONTENT_TYPE: 
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 0
+Actual bytes read from stdin: 0
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 100000000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 100000000
+Actual bytes read from stdin: 100000000
+Execution time: 13268 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 100000000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 100000000
+Actual bytes read from stdin: 100000000
+Execution time: 12681 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: GET
+CONTENT_LENGTH: undefined
+CONTENT_TYPE: 
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 0
+Actual bytes read from stdin: 0
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: undefined
+CONTENT_TYPE: 
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 0
+Actual bytes read from stdin: 0
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 100000000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 100000000
+Actual bytes read from stdin: 100000000
+Execution time: 13001 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: GET
+CONTENT_LENGTH: undefined
+CONTENT_TYPE: 
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 0
+Actual bytes read from stdin: 0
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: undefined
+CONTENT_TYPE: 
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 0
+Actual bytes read from stdin: 0
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 100000000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 100000000
+Actual bytes read from stdin: 100000000
+Execution time: 13135 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: GET
+CONTENT_LENGTH: undefined
+CONTENT_TYPE: 
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 0
+Actual bytes read from stdin: 0
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+REQUEST_METHOD: POST
+CONTENT_LENGTH: undefined
+CONTENT_TYPE: 
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Expected content length: 0
+Actual bytes read from stdin: 0
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+Expected content length: 100000000
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 100000000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Actual bytes read from stdin: 100000000
+Execution time: 12796 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+Expected content length: 0
+REQUEST_METHOD: GET
+CONTENT_LENGTH: undefined
+CONTENT_TYPE: 
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Actual bytes read from stdin: 0
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+Expected content length: 0
+REQUEST_METHOD: POST
+CONTENT_LENGTH: undefined
+CONTENT_TYPE: 
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Actual bytes read from stdin: 0
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+Expected content length: 100000000
+Actual bytes read from stdin: 100000000
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 100000000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Execution time: 13709 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+Expected content length: 100000000
+Actual bytes read from stdin: 100000000
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 100000000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Execution time: 13201 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+Expected content length: 100000000
+Actual bytes read from stdin: 100000000
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 100000000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Execution time: 12273 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+Expected content length: 0
+Actual bytes read from stdin: 0
+REQUEST_METHOD: GET
+CONTENT_LENGTH: undefined
+CONTENT_TYPE: 
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+Expected content length: 0
+Actual bytes read from stdin: 0
+REQUEST_METHOD: POST
+CONTENT_LENGTH: undefined
+CONTENT_TYPE: 
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+Expected content length: 100000000
+Actual bytes read from stdin: 100000000
+REQUEST_METHOD: POST
+CONTENT_LENGTH: 100000000
+CONTENT_TYPE: application/x-www-form-urlencoded
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Execution time: 12418 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+Expected content length: 0
+Actual bytes read from stdin: 0
+REQUEST_METHOD: GET
+CONTENT_LENGTH: undefined
+CONTENT_TYPE: 
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+Expected content length: 0
+Actual bytes read from stdin: 0
+REQUEST_METHOD: POST
+CONTENT_LENGTH: undefined
+CONTENT_TYPE: 
+QUERY_STRING: 
+SCRIPT_NAME: ./www/directory/youpi.bla
+PATH_INFO: /directory/youpi.bla
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+Expected content length: 100000000
+Actual bytes read from stdin: 100000000
+Execution time: 12836 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+Expected content length: 0
+Actual bytes read from stdin: 0
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+Expected content length: 0
+Actual bytes read from stdin: 0
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+Expected content length: 0
+Actual bytes read from stdin: 0
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+Expected content length: 0
+Actual bytes read from stdin: 0
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+Expected content length: 0
+Actual bytes read from stdin: 0
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+Expected content length: 5
+Actual bytes read from stdin: 5
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+Expected content length: 5
+Actual bytes read from stdin: 5
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+Expected content length: 100000000
+Actual bytes read from stdin: 100000000
+Execution time: 22077 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+Expected content length: 100000000
+Actual bytes read from stdin: 100000000
+Execution time: 23910 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+Expected content length: 100000000
+Actual bytes read from stdin: 100000000
+Execution time: 13003 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+Expected content length: 0
+Actual bytes read from stdin: 0
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+Expected content length: 0
+Actual bytes read from stdin: 0
+Execution time: 0 ms
+=== CGI Execution Finished ===
+
+=== CGI Execution Started ===
+Expected content length: 100000000
+Actual bytes read from stdin: 100000000
+Execution time: 13043 ms
+=== CGI Execution Finished ===
+

@@ -1,0 +1,5 @@
+This is a sample text file for testing static file serving.
+
+You can download this file directly from the web server.
+
+File served by Webserv HTTP Server!

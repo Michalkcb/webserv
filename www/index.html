@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome to Webserv</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .feature {
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-left: 4px solid #007bff;
+        }
+        .links {
+            margin-top: 30px;
+        }
+        .links a {
+            display: inline-block;
+            margin: 10px;
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+        }
+        .links a:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Welcome to Webserv!</h1>
+        <p>Your HTTP/1.1 compliant web server is running successfully!</p>
+        
+        <div class="feature">
+            <h3>✅ Features Supported:</h3>
+            <ul>
+                <li>HTTP/1.1 GET, POST, and DELETE methods</li>
+                <li>Static file serving</li>
+                <li>Directory listing (autoindex)</li>
+                <li>File uploads</li>
+                <li>CGI script execution</li>
+                <li>Custom error pages</li>
+                <li>Virtual hosts support</li>
+                <li>Non-blocking I/O with poll()</li>
+            </ul>
+        </div>
+        
+        <div class="feature">
+            <h3>🔧 Configuration:</h3>
+            <p>Server configuration is loaded from <code>config/default.conf</code></p>
+            <p>Web root directory: <code>./www</code></p>
+        </div>
+        
+        <div class="links">
+            <h3>🔗 Try These Links:</h3>
+            <a href="/static/">Static Files</a>
+            <a href="/upload/">File Upload</a>
+            <a href="/cgi-bin/">CGI Scripts</a>
+            <a href="/nonexistent">404 Error</a>
+        </div>
+        
+        <hr>
+        <p style="text-align: center; color: #666;">
+            <small>Powered by Webserv 1.0 | C++98 HTTP Server</small>
+        </p>
+    </div>
+</body>
+</html>
