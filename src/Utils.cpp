@@ -7,6 +7,7 @@ static inline int hexDigit(int c) {
     if (c >= 'a' && c <= 'f') return 10 + (c - 'a');
     return -1;
 }
+
 bool Utils::dechunk(const std::string& in, std::string& out) {
     out.clear();
     size_t i = 0, n = in.size();
