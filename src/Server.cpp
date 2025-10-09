@@ -125,8 +125,15 @@ void Server::_updatePollFds() {
         Client& client = it->second;
 
         // Add the client's main socket
-    struct pollfd client_pfd = {client.getFd(), POLLIN, 0};
-    if (client.getState() == Client::SENDING_RESPONSE || !client.getSendBuffer().empty()) {
+        struct pollfd client_pfd = {client.getFd(), 0, 0};
+        
+        // Only monitor POLLIN if client needs more data
+        if (!client.getRequest().isComplete() || client.getRequest().hasRemainingData()) {
+            client_pfd.events |= POLLIN;
+        }
+        
+        // Monitor POLLOUT if client has data to send
+        if (client.getState() == Client::SENDING_RESPONSE || !client.getSendBuffer().empty()) {
             client_pfd.events |= POLLOUT;
         }
         _pollFds.push_back(client_pfd);

@@ -1,0 +1,624 @@
+
+	
+**********************************   Webserv  *******************************
+make
+pkill webserv; ./webserv config/default.conf
+sleep 2
+curl -H "Accept-Encoding: gzip" http://localhost:8080/ > /dev/null
+python3 test_bonus_features.py http://localhost:8080
+
+chmod +x ubuntu_tester && ./ubuntu_tester --help
+chmod +x ubuntu_cgi_tester
+
+YoupiBanane/
+├── youpi.bad_extension
+├── youpi.bla
+├── nop/
+│   ├── youpi.bad_extension
+│   └── other.pouic
+└── Yeah/
+    └── not_happy.bad_extension
+
+mkdir -p YoupiBanane/nop YoupiBanane/Yeah
+
+echo "YoupiBanane test content" > YoupiBanane/youpi.bad_extension && echo "Bla file content" > YoupiBanane/youpi.bla && echo "Nop content" > YoupiBanane/nop/youpi.bad_extension && echo "Other content" > YoupiBanane/nop/other.pouic && echo "Not happy content" > YoupiBanane/Yeah/not_happy.bad_extension
+
+cp ubuntu_cgi_tester cgi_test && chmod +x cgi_test
+
+cp ubuntu_cgi_tester www/cgi-bin/cgi_test && chmod +x www/cgi-bin/cgi_test
+
+make
+
+./webserv tester_config.conf &
+
+sleep 2 && ps aux | grep webserv | grep -v grep
+
+echo "http://127.0.0.1:8080" | ./ubuntu_tester
+
+./ubuntu_tester http://127.0.0.1:80
+ps aux | grep webserv
+
+pkill -f webserv
+kill -9 12459
+sudo lsof -i :8080
+kill -9 PID
+make fclean
+make
+
+pkill -f webserv || true
+ss -ltnp | grep 8080
+
+XXXXXXXXXXXXXXXXXXXXXXXXXXXX    1test    XXXXXXXXXXXXXXXXXXXXXXXX
+
+./webserv tester_config.conf &
+./webserv tester_config_final.conf &
+./webserv tester_config_correct &
+./webserv test_linux/linux_8080.conf
+./WebServer config.conf &
+
+WEBSERV_DEBUG_ALLOW_LARGE=1
+export WEBSERV_DEBUG_RETURN_CGI_SUMMARY=1
+WEBSERV_DEBUG_RETURN_RAW_CGI_AS_BODY=1 ./webserv tester_config.conf
+
+XXXXXXXXXXXXXXXXXXXXXXXXXXXX    2test    XXXXXXXXXXXXXXXXXXXXXXXX
+
+./ubuntu_tester http://127.0.0.1:8080
+./test_linux/ubuntu_tester http://127.0.0.1:8080
+
+ls -1t /tmp/ws_cgi_env_*.txt | head -n1
+grep -iE 'CONTENT_LENGTH|HTTP_X_SECRET_HEADER_FOR_TEST' <file>
+
+XXXXXXXXXXXXXXXXXXXXXXXXXXXX    3test    XXXXXXXXXXXXXXXXXXXXXXXX
+
+./ubuntu_cgi_tester http://127.0.0.1:8080
+
+dd if=/dev/zero bs=1 count=100000000 | tr '\0' 'a' > file_100MB.txt
+
+curl -X POST http://127.0.0.1:8080/directory/youpi.bla \
+  -H "Content-Length: 100000000" \
+  -H "Content-Type: test/file" \
+  -H "Accept-Encoding: gzip" \
+  --data-binary @file_100MB.txt \
+  --output /tmp/test_response_100MB.txt
+  
+hexdump -C /tmp/test_response_100MB.txt | head -n 5
+
+Enums provide a way to define related constants, members store the data, and methods define the operations that can be performed on that data.
+
+test 01
+curl -i -X POST http://127.0.0.1:8080/ -d ''
+
+HTTP/1.1 405 Method Not Allowed
+Content-Length: 148
+Content-Type: text/html
+Date: Thu, 18 Sep 2025 17:08:53 GMT
+Server: webserv/1.0
+
+<!DOCTYPE html>
+<html><head><title>405 Method Not Allowed</title></head>
+<body><h1>405 Method Not Allowed</h1>
+<hr><p>webserv/1.0</p></body></html>
+
+curl -v http://127.0.0.1:8080/directory/Yeah
+curl -v -X POST http://127.0.0.1:8080/directory/youpi.bla -d @/dev/null
+
+printf "GET /directory/Yeah HTTP/1.1\r\nHost: 127.0.0.1:8080\r\n\r\n" | nc 127.0.0.1 8080
+
+telnet 127.0.0.1 8080
+GET /directory/Yeah HTTP/1.1
+Host: 127.0.0.1:8080 ((Press Enter twice after Host.))
+
+printf "POST /directory/youpi.bla HTTP/1.1\r\nHost: 127.0.0.1:8080\r\nContent-Length: 100000000\r\n\r\n" | nc 127.0.0.1 8080
+
+curl -v -X POST http://127.0.0.1:8080/directory/youpi.bla \
+     -H "Content-Length: 100000000" \
+     -d ""
+
+head -c 1024 /dev/zero | \
+curl -v -X POST http://127.0.0.1:8080/directory/youpi.bla \
+     -H "Content-Length: 100000000" \
+     --data-binary @-
+     
+head -c 100000000 /dev/zero | curl -v -X POST http://127.0.0.1:8080/directory/youpi.bla -H "Content-Length: 100000000" --data-binary @-
+
+head -c 1000 /dev/zero | curl -v --data-binary @- http://127.0.0.1:8080/directory/youpi.bla
+
+head -c 100000000 /dev/zero > test_100MB.bin
+
+head -c 200 /dev/zero > test_200B.bin
+
+head -c 200 /dev/zero | curl -s -D- -X POST --data-binary @- http://127.0.0.1:8080/post_body
+
+curl -X POST http://127.0.0.1:8080/directory/post_body \
+  -H "Content-Length: 200" \
+  --data-binary @file_200B.bin \
+  --output /tmp/full_response_200B.bin
+
+jkalinow@Ubuntu-HP-Notebook:~/Webserv_200_100M_c5_broken_pipe$ curl -X POST http://127.0.0.1:8080/directory/youpi.bla \
+  -H "Content-Length: 100000000" \
+  --data-binary @file_100MB.bin \
+  --output /tmp/full_response_bp.bin
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+100  190M  100 95.3M  100 95.3M  2076k  2076k  0:00:47  0:00:47 --:--:-- 26.3M
+jkalinow@Ubuntu-HP-Notebook:~/Webserv_200_100M_c5_broken_pipe$ 
+
+jkalinow@Ubuntu-HP-Notebook:~/webserv_s1$ curl -X POST http://127.0.0.1:8080/directory/youpi.bla \
+  -H "Content-Length: 100000000" \
+  --data-binary @file_100MB.bin \
+  --output /tmp/full_response_bp.bin
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+100  190M  100 95.3M  100 95.3M  25.1M  25.1M  0:00:03  0:00:03 --:--:-- 50.3M
+jkalinow@Ubuntu-HP-Notebook:~/webserv_s1$ 
+
+cmp -l full_response_bp.bin full_response_s1.bin
+
+ls -lh /tmp/full_response.bin
+
+-rw-r--r-- 1 user user 100M Sep 17 12:46 /tmp/full_response.bin
+
+
+sudo -k           # invalidate cached sudo timestamp
+sudo -v           # prompt for password (tests it)
+sudo -l           # list allowed commands for your user (helps debug sudoers)
+
+export WEBSERV_DEBUG_RETURN_RAW_CGI_AS_BODY=1
+nohup ./webserv tester_config.conf > /tmp/webserv_run.log 2>&1 & echo $! > /tmp/webserv_pid
+
+PID=$(cat /tmp/webserv_pid) && sudo tr '\0' '\n' < /proc/$PID/environ | grep WEBSERV_DEBUG_RETURN_RAW_CGI_AS_BODY
+
+python3 -c 'import sys; sys.stdout.write("A"*1000)' > /tmp/payload.bin
+curl -s -D /tmp/curl_headers.txt -o /tmp/curl_body.txt -X POST --http1.1 -H "Content-Type: application/x-www-form-urlencoded" -H "Content-Length: 1000" --data-binary @/tmp/payload.bin http://127.0.0.1:8080/directory/youpi.bla
+
+ls -l /tmp/final_send_buffer.bin /tmp/cgi_raw_input_before_parse.bin /tmp/cgi_raw_stdin_before_write.bin
+hexdump -C /tmp/final_send_buffer.bin | head -n 80
+tail -n 200 /tmp/webserv_run.log | grep -E "Entered finalizeCgiResponse|CGI finalize|WEBSERV_DEBUG_RETURN_RAW_CGI_AS_BODY"
+
+
+pkill -f webserv || true
+
+WEBSERV_DEBUG_RETURN_RAW_CGI_AS_BODY=1 ./webserv tester_config.conf
+
+# create payload and POST it
+python3 -c 'import sys; sys.stdout.write("A"*1000)' > /tmp/payload.bin
+curl -s -D /tmp/curl_headers.txt -o /tmp/curl_body.txt -X POST --http1.1 \
+  -H "Content-Type: application/x-www-form-urlencoded" -H "Content-Length: 1000" \
+  --data-binary @/tmp/payload.bin http://127.0.0.1:8080/directory/youpi.bla
+  
+ls -l /tmp/final_send_buffer.bin /tmp/cgi_raw_input_before_parse.bin /tmp/cgi_raw_stdin_before_write.bin
+hexdump -C /tmp/final_send_buffer.bin | head -n 80
+tail -n 200 /tmp/webserv_run.log | grep -E "Entered finalizeCgiResponse|CGI finalize|WEBSERV_DEBUG_RETURN_RAW_CGI_AS_BODY"
+
+# 1) Stop everything and rebuild (in project root)
+pkill -f webserv || true
+make -j2
+
+# 2) Start server with exported env var in this shell (repeatable)
+export WEBSERV_DEBUG_RETURN_RAW_CGI_AS_BODY=1
+./webserv tester_config.conf > /tmp/webserv_run.log 2>&1 & echo $! > /tmp/webserv_pid
+sleep 0.5
+
+# 3) Verify the process has the env var
+PID=$(cat /tmp/webserv_pid) && sudo tr '\0' '\n' < /proc/$PID/environ | grep WEBSERV_DEBUG_RETURN_RAW_CGI_AS_BODY || echo "env missing for PID $PID"
+
+# 4) adjust path if different in your config
+ls -l www/directory/youpi.bla
+grep -En 'cgi_path|\.bla' tester_config.conf || true
+
+# 5) Inspect debug artifacts and logs
+python3 -c 'import sys; sys.stdout.write("A"*1000)' > /tmp/payload.bin
+curl -s -D /tmp/curl_headers.txt -o /tmp/curl_body.txt -X POST --http1.1 \
+  -H "Content-Type: application/x-www-form-urlencoded" -H "Content-Length: 1000" \
+  --data-binary @/tmp/payload.bin http://127.0.0.1:8080/directory/youpi.bla
+   
+# 6)
+ls -l /tmp/final_send_buffer.bin /tmp/cgi_raw_input_before_parse.bin /tmp/cgi_raw_stdin_before_write.bin || true
+hexdump -C /tmp/final_send_buffer.bin | head -n 80 || true
+grep -E "Entered finalizeCgiResponse|CGI finalize|WEBSERV_DEBUG_RETURN_RAW_CGI_AS_BODY" /tmp/webserv_run.log || tail -n 200 /tmp/webserv_run.log
+
+env WEBSERV_DEBUG_ALLOW_LARGE=1 WEBSERV_DEBUG_RETURN_CGI_SUMMARY=1 ./webserv tester_config.conf > /tmp/webserv_run.log 2>&1 & echo $! > /tmp/webserv_pid
+
+export WEBSERV_DEBUG_RETURN_CGI_SUMMARY=1
+./webserv tester_config.conf > /tmp/webserv_run.log 2>&1 & echo $! > /tmp/webserv_pid
+
+ls -l /tmp/final_send_buffer.bin /tmp/cgi_raw_input_before_parse.bin /tmp/cgi_raw_stdin_before_write.bin /tmp/curl_body.txt /tmp/curl_headers.txt /tmp/webserv_pid || true
+printf "\n-- curl body (first 400 bytes) --\n"
+head -c 400 /tmp/curl_body.txt | hexdump -C | sed -n '1,160p'
+printf "\n-- final_send_buffer (first 400 bytes) --\n"
+head -c 400 /tmp/final_send_buffer.bin | hexdump -C | sed -n '1,160p'
+
+head -c 400 /tmp/curl_body.txt | hexdump -C | sed -n '1,160p'
+
+g++ -o cgi_test cgi_debug.cpp
+
+bad cgi returned size body
+
+***********************************************************************
+jkalinow@Ubuntu-HP-Notebook:~/Webserv_200_100M_c5_broken_pipe$ ./ubuntu_tester http://127.0.0.1:8080
+Welcome in this little webserver tester.
+Passing the test here is the minimum before going to an evaluation.
+
+press enter to continue
+
+THIS TEST IS NOT MEANT TO BE THE ONLY TEST IN THE EVALUATION!!!
+	
+press enter to continue
+
+Before starting please follow the next few steps (files content can be anything and will be shown to you by the test):
+- Download the cgi_test executable on the host
+- Create a directory YoupiBanane with:
+	-a file name youpi.bad_extension
+	-a file name youpi.bla
+	-a sub directory called nop
+		-a file name youpi.bad_extension in nop
+		-a file name other.pouic in nop
+	-a sub directory called Yeah
+		-a file name not_happy.bad_extension in Yeah
+press enter to continue
+
+Setup the configuration file as follow:
+- / must answer to GET request ONLY
+- /put_test/* must answer to PUT request and save files to a directory of your choice
+- any file with .bla as extension must answer to POST request by calling the cgi_test executable
+- /post_body must answer anything to POST request with a maxBody of 100
+- /directory/ must answer to GET request and the root of it would be the repository YoupiBanane and if no file are requested, it should search for youpi.bad_extension files
+
+press enter to continue
+
+Before starting please verify that the server is launched
+press enter to continue
+
+
+Test GET http://127.0.0.1:8080/
+content returned: <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome to Webserv</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .feature {
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-left: 4px solid #007bff;
+        }
+        .links {
+            margin-top: 30px;
+        }
+        .links a {
+            display: inline-block;
+            margin: 10px;
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+        }
+        .links a:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Welcome to Webserv!</h1>
+        <p>Your HTTP/1.1 compliant web server is running successfully!</p>
+        
+        <div class="feature">
+            <h3>✅ Features Supported:</h3>
+            <ul>
+                <li>HTTP/1.1 GET, POST, and DELETE methods</li>
+                <li>Static file serving</li>
+                <li>Directory listing (autoindex)</li>
+                <li>File uploads</li>
+                <li>CGI script execution</li>
+                <li>Custom error pages</li>
+                <li>Virtual hosts support</li>
+                <li>Non-blocking I/O with poll()</li>
+            </ul>
+        </div>
+        
+        <div class="feature">
+            <h3>🔧 Configuration:</h3>
+            <p>Server configuration is loaded from <code>config/default.conf</code></p>
+            <p>Web root directory: <code>./www</code></p>
+        </div>
+        
+        <div class="links">
+            <h3>🔗 Try These Links:</h3>
+            <a href="/static/">Static Files</a>
+            <a href="/upload/">File Upload</a>
+            <a href="/cgi-bin/">CGI Scripts</a>
+            <a href="/nonexistent">404 Error</a>
+        </div>
+        
+        <hr>
+        <p style="text-align: center; color: #666;">
+            <small>Powered by Webserv 1.0 | C++98 HTTP Server</small>
+        </p>
+    </div>
+</body>
+</html>
+
+
+Test POST http://127.0.0.1:8080/ with a size of 0
+
+Test HEAD http://127.0.0.1:8080/
+
+Test GET http://127.0.0.1:8080/directory
+2025/09/19 14:18:35 Unsolicited response received on idle HTTP channel starting with "<!DOCTYPE html>\n<html><head><title>405 Method Not Allowed</title></head>\n<body><h1>405 Method Not Allowed</h1>\n<hr><p>webserv/1.0</p></body></html>\n"; err=<nil>
+content returned: YoupiBanane test content
+
+
+Test GET http://127.0.0.1:8080/directory/youpi.bad_extension
+content returned: YoupiBanane test content
+
+
+Test GET http://127.0.0.1:8080/directory/youpi.bla
+content returned: placeholder bla
+
+
+Test GET Expected 404 on http://127.0.0.1:8080/directory/oulalala
+content returned: <!DOCTYPE html>
+<html><head><title>404 Not Found</title></head>
+<body><h1>404 Not Found</h1>
+<hr><p>webserv/1.0</p></body></html>
+
+
+Test GET http://127.0.0.1:8080/directory/nop
+content returned: nested bad
+
+
+Test GET http://127.0.0.1:8080/directory/nop/
+content returned: nested bad
+
+
+Test GET http://127.0.0.1:8080/directory/nop/other.pouic
+content returned: other pouic
+
+
+Test GET Expected 404 on http://127.0.0.1:8080/directory/nop/other.pouac
+content returned: <!DOCTYPE html>
+<html><head><title>404 Not Found</title></head>
+<body><h1>404 Not Found</h1>
+<hr><p>webserv/1.0</p></body></html>
+
+
+Test GET Expected 404 on http://127.0.0.1:8080/directory/Yeah
+content returned: <!DOCTYPE html>
+<html><head><title>404 Not Found</title></head>
+<body><h1>404 Not Found</h1>
+<hr><p>webserv/1.0</p></body></html>
+
+
+Test GET http://127.0.0.1:8080/directory/Yeah/not_happy.bad_extension
+content returned: not happy
+
+
+Test POST http://127.0.0.1:8080/directory/youpi.bla with a size of 100000000
+FATAL ERROR ON LAST TEST: bad cgi returned size body
+
+*****************************************************************************jkalinow@Ubuntu-HP-Notebook:~/WebServ_robot/Webserv_b$ ./ubuntu_tester http://127.0.0.1:8080
+Welcome in this little webserver tester.
+Passing the test here is the minimum before going to an evaluation.
+
+press enter to continue
+
+THIS TEST IS NOT MEANT TO BE THE ONLY TEST IN THE EVALUATION!!!
+	
+press enter to continue
+
+Before starting please follow the next few steps (files content can be anything and will be shown to you by the test):
+- Download the cgi_test executable on the host
+- Create a directory YoupiBanane with:
+	-a file name youpi.bad_extension
+	-a file name youpi.bla
+	-a sub directory called nop
+		-a file name youpi.bad_extension in nop
+		-a file name other.pouic in nop
+	-a sub directory called Yeah
+		-a file name not_happy.bad_extension in Yeah
+press enter to continue
+
+Setup the configuration file as follow:
+- / must answer to GET request ONLY
+- /put_test/* must answer to PUT request and save files to a directory of your choice
+- any file with .bla as extension must answer to POST request by calling the cgi_test executable
+- /post_body must answer anything to POST request with a maxBody of 100
+- /directory/ must answer to GET request and the root of it would be the repository YoupiBanane and if no file are requested, it should search for youpi.bad_extension files
+
+press enter to continue
+
+Before starting please verify that the server is launched
+press enter to continue
+
+
+Test GET http://127.0.0.1:8080/
+content returned: <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome to Webserv</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .feature {
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-left: 4px solid #007bff;
+        }
+        .links {
+            margin-top: 30px;
+        }
+        .links a {
+            display: inline-block;
+            margin: 10px;
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+        }
+        .links a:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Welcome to Webserv!</h1>
+        <p>Your HTTP/1.1 compliant web server is running successfully!</p>
+        
+        <div class="feature">
+            <h3>✅ Features Supported:</h3>
+            <ul>
+                <li>HTTP/1.1 GET, POST, and DELETE methods</li>
+                <li>Static file serving</li>
+                <li>Directory listing (autoindex)</li>
+                <li>File uploads</li>
+                <li>CGI script execution</li>
+                <li>Custom error pages</li>
+                <li>Virtual hosts support</li>
+                <li>Non-blocking I/O with poll()</li>
+            </ul>
+        </div>
+        
+        <div class="feature">
+            <h3>🔧 Configuration:</h3>
+            <p>Server configuration is loaded from <code>config/default.conf</code></p>
+            <p>Web root directory: <code>./www</code></p>
+        </div>
+        
+        <div class="links">
+            <h3>🔗 Try These Links:</h3>
+            <a href="/static/">Static Files</a>
+            <a href="/upload/">File Upload</a>
+            <a href="/cgi-bin/">CGI Scripts</a>
+            <a href="/nonexistent">404 Error</a>
+        </div>
+        
+        <hr>
+        <p style="text-align: center; color: #666;">
+            <small>Powered by Webserv 1.0 | C++98 HTTP Server</small>
+        </p>
+    </div>
+</body>
+</html>
+
+
+Test POST http://127.0.0.1:8080/ with a size of 0
+
+Test HEAD http://127.0.0.1:8080/
+2025/09/19 14:51:43 Unsolicited response received on idle HTTP channel starting with "<!DOCTYPE html>\n<html><head><title>405 Method Not Allowed</title></head>\n<body><h1>405 Method Not Allowed</h1>\n<hr><p>webserv/1.0</p></body></html>\n"; err=<nil>
+
+Test GET http://127.0.0.1:8080/directory
+content returned: YoupiBanane test content
+
+
+Test GET http://127.0.0.1:8080/directory/youpi.bad_extension
+content returned: YoupiBanane test content
+
+
+Test GET http://127.0.0.1:8080/directory/youpi.bla
+content returned: placeholder bla
+
+
+Test GET Expected 404 on http://127.0.0.1:8080/directory/oulalala
+content returned: <!DOCTYPE html>
+<html><head><title>404 Not Found</title></head>
+<body><h1>404 Not Found</h1>
+<hr><p>webserv/1.0</p></body></html>
+
+
+Test GET http://127.0.0.1:8080/directory/nop
+content returned: nested bad
+
+
+Test GET http://127.0.0.1:8080/directory/nop/
+content returned: nested bad
+
+
+Test GET http://127.0.0.1:8080/directory/nop/other.pouic
+content returned: other pouic
+
+
+Test GET Expected 404 on http://127.0.0.1:8080/directory/nop/other.pouac
+content returned: <!DOCTYPE html>
+<html><head><title>404 Not Found</title></head>
+<body><h1>404 Not Found</h1>
+<hr><p>webserv/1.0</p></body></html>
+
+
+Test GET Expected 404 on http://127.0.0.1:8080/directory/Yeah
+content returned: <!DOCTYPE html>
+<html><head><title>404 Not Found</title></head>
+<body><h1>404 Not Found</h1>
+<hr><p>webserv/1.0</p></body></html>
+
+
+Test GET http://127.0.0.1:8080/directory/Yeah/not_happy.bad_extension
+content returned: not happy
+
+
+Test POST http://127.0.0.1:8080/directory/youpi.bla with a size of 100000000
+
+Test POST http://127.0.0.1:8080/directory/youpla.bla with a size of 100000000
+FATAL ERROR ON LAST TEST: bad status code
+
+****************************************************************************
+bash -lc "printf 'hello world' | REQUEST_METHOD=POST SERVER_PROTOCOL=HTTP/1.1 GATEWAY_INTERFACE=CGI/1.1 CONTENT_LENGTH=11 CONTENT_TYPE=application/octet-stream SCRIPT_NAME=/directory/youpi.bla SCRIPT_FILENAME=$PWD/YoupiBanane/youpi.bla REQUEST_URI=/directory/youpi.bla QUERY_STRING= SERVER_NAME=localhost SERVER_PORT=8080 REMOTE_ADDR=127.0.0.1 SERVER_SOFTWARE=webserv/1.0 ./cgi_test $PWD/YoupiBanane/youpi.bla | sed -n '1,40p'"
+
+bash -lc "head -c 100000000 /dev/zero | curl -s -o /dev/null -w 'status:%{http_code} dl:%{size_download} ul:%{size_upload} hs:%{size_header} rt:%{time_total}\n' --http1.1 -H 'Content-Type: application/octet-stream' --data-binary @- http://127.0.0.1:8080/directory/youpi.bla"
+
+GATEWAY_INTERFACE=CGI/1.1
+PATH=/usr/bin:/bin
+PATH_INFO=/directory/youpi.bla
+PATH_TRANSLATED=./cgi_test
+QUERY_STRING=
+REDIRECT_STATUS=200
+REMOTE_ADDR=127.0.0.1
+REMOTE_PORT=0
+REQUEST_METHOD=POST
+REQUEST_URI=/directory/youpi.bla
+SCRIPT_FILENAME=./cgi_test
+SCRIPT_NAME=/directory/youpi.bla
+SERVER_NAME=localhost
+SERVER_PORT=8080
+SERVER_PROTOCOL=HTTP/1.1
+SERVER_SOFTWARE=webserv/1.0

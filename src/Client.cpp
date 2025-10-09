@@ -5,6 +5,7 @@
 #include "Session.hpp"
 #include "Compression.hpp"
 #include "Range.hpp"
+#include "Range.hpp"
 #include <sys/stat.h>
 #include <errno.h>
 #include <unistd.h>
@@ -169,10 +170,14 @@ void Client::processRequest(const class Config& config) {
     // Parse any received data
 
     if (!_receiveBuffer.empty()) {
+        
         Request::ParseState parseState = _request.parse(_receiveBuffer);
-        // Clear buffer after feeding to parser to avoid re-feeding on next call
-        _receiveBuffer.clear();
         Logger::debug("Parse result: " + Utils::intToString((int)parseState));
+        
+        // Only clear buffer if parsing is complete or failed
+        if (parseState == Request::PARSE_COMPLETE || parseState == Request::PARSE_ERROR) {
+            _receiveBuffer.clear();
+        }
 
         // If headers were just parsed (transitioned into PARSE_BODY) and client expects 100-continue,
         // send the interim response once, then continue receiving the body.
@@ -932,8 +937,18 @@ void Client::finalizeCgiResponse() {
                         std::string headersStr = _cgiOutputBuffer.substr(0, header_end_pos);
                         std::string body = _cgiOutputBuffer.substr(header_end_pos + sep_len);
                         Response r = _cgi->parseHeaders(headersStr);
-                        // Overwrite/ensure Content-Length is accurate
-                        r.setHeader("Content-Length", Utils::intToString((int)body.size()));
+                        // Ensure Content-Length matches actual body size
+                        size_t actualBodySize = body.size();
+                        std::string declaredCL = r.getHeader("Content-Length");
+                        if (!declaredCL.empty()) {
+                            size_t declaredSize = Utils::stringToSize(declaredCL);
+                            if (declaredSize != actualBodySize) {
+                                Logger::debug("CGI Content-Length mismatch: declared=" + 
+                                            Utils::intToString((int)declaredSize) + 
+                                            ", actual=" + Utils::intToString((int)actualBodySize));
+                            }
+                        }
+                        r.setHeader("Content-Length", Utils::intToString((int)actualBodySize));
                         // Diagnostics: if this is the ubuntu_tester CGI path, dump header/body size
                         {
                             std::string reqPath = _request.getPath();

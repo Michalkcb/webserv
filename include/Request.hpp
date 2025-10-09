@@ -67,6 +67,7 @@ public:
     bool isChunked() const;
     bool isStreamingMode() const;
     bool hasChunkedTimeout(int timeoutSeconds = 60) const;  // Check if chunked upload has timed out
+    bool hasRemainingData() const { return !_remainingData.empty(); }
 
     // Setters
     void setMethod(const std::string& method);
