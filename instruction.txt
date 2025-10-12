@@ -35,7 +35,7 @@ sleep 2 && ps aux | grep webserv | grep -v grep
 
 echo "http://127.0.0.1:8080" | ./ubuntu_tester
 
-./ubuntu_tester http://127.0.0.1:80
+./ubuntu_tester http://127.0.0.1:8080
 ps aux | grep webserv
 
 pkill -f webserv

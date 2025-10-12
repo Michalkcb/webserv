@@ -138,19 +138,10 @@ void Response::addDefaultHeaders() {
 Response Response::createErrorResponse(int statusCode, const std::string& errorPage) {
     Response response(statusCode);
     
-    // Special handling for 405 Method Not Allowed:
-    // Some clients/testers don't consume the response body for 405 and immediately
-    // issue the next request on the same connection. If we send a body here, those
-    // bytes may arrive while the client believes the channel is idle, leading to
-    // "unsolicited response on idle HTTP channel" and misaligned parsing for the
-    // next request (e.g., HEAD /). To avoid that, return an empty body and an
-    // explicit Content-Length: 0 for 405 responses.
-    if (statusCode == HTTP_METHOD_NOT_ALLOWED) {
-        response.setHeader("Content-Type", "text/plain");
-        response.setBody("");               // Sets Content-Length: 0
-        response.setComplete(true);
-        return response;
-    }
+    // Previously we returned an empty body for 405 responses to avoid some
+    // clients misinterpreting leftover bytes. That special-case breaks the
+    // ubuntu_tester expectations which require a standard HTML error page.
+    // Fall through to normal error page generation for all status codes.
 
     std::string body;
     if (!errorPage.empty() && Utils::fileExists(errorPage)) {

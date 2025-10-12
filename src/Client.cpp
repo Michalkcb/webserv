@@ -128,8 +128,37 @@ ssize_t Client::receiveData() {
 ssize_t Client::sendData() {
     if (_sendBuffer.empty()) return 0;
 
+    // Diagnostic: dump the first part of the send buffer for any send operation
+    // to help diagnose unsolicited responses appearing on idle channels.
+    {
+        size_t preview = std::min((size_t)256, _sendBuffer.size());
+        std::string previewStr = _sendBuffer.substr(0, preview);
+        char outpath_all[128];
+        snprintf(outpath_all, sizeof(outpath_all), "/tmp/send_dump_fd_%d_%ld.txt", _fd, (long)time(NULL));
+        FILE* f = fopen(outpath_all, "w");
+        if (f) {
+            fwrite(previewStr.data(), 1, previewStr.size(), f);
+            fclose(f);
+            Logger::debug(std::string("Wrote send preview to: ") + outpath_all);
+        }
+    }
+
     ssize_t bytesSent = send(_fd, _sendBuffer.data(), _sendBuffer.size(), MSG_NOSIGNAL);
     if (bytesSent > 0) {
+        // Diagnostic: dump the exact bytes we are sending for HEAD requests
+        // to help debug tester failures around unexpected status codes.
+        if (_request.getMethod() == "HEAD") {
+            std::string sentChunk = _sendBuffer.substr(0, bytesSent);
+            char outpath[128];
+            snprintf(outpath, sizeof(outpath), "/tmp/sent_fd_%d_%ld.bin", _fd, (long)time(NULL));
+            FILE* fout = fopen(outpath, "wb");
+            if (fout) {
+                fwrite(sentChunk.data(), 1, sentChunk.size(), fout);
+                fclose(fout);
+            }
+            Logger::debug(std::string("Wrote HEAD send dump to: ") + outpath);
+        }
+
         _sendBuffer.erase(0, bytesSent);
         updateLastActivity();
         if (_sendBuffer.empty()) {
@@ -168,13 +197,17 @@ ssize_t Client::sendData() {
 }
 
 void Client::processRequest(const class Config& config) {
-    // Parse any received data
-
-    if (!_receiveBuffer.empty()) {
-        
+    // Parse any received data, but only when we're ready to accept a new request.
+    // If we're currently sending a response (SENDING_RESPONSE) we must NOT
+    // parse incoming bytes as a new request yet — doing so can turn a
+    // request-line from a pipelined request into a malformed header if the
+    // Request object's state hasn't been reset. The connection will be
+    // returned to RECEIVING_REQUEST once the response is fully sent and the
+    // Request object has been reset in sendData().
+    if (!_receiveBuffer.empty() && _state == RECEIVING_REQUEST) {
         Request::ParseState parseState = _request.parse(_receiveBuffer);
         Logger::debug("Parse result: " + Utils::intToString((int)parseState));
-        
+
         // Only clear buffer if parsing is complete or failed
         if (parseState == Request::PARSE_COMPLETE || parseState == Request::PARSE_ERROR) {
             _receiveBuffer.clear();
@@ -238,8 +271,10 @@ void Client::processRequest(const class Config& config) {
 
     // Early CGI spawn for POST on CGI-mapped locations while body is still streaming
     if (location && location->isCgiRequest(_request.getUri()) && !_cgi) {
-        std::string reqMethod = Utils::toUpperCase(_request.getMethod());
-        if (!location->isMethodAllowed(reqMethod)) {
+    std::string reqMethod = Utils::toUpperCase(_request.getMethod());
+    // Treat HEAD as GET for permission checks: if GET is allowed, HEAD should be allowed too.
+    std::string methodForCheck = reqMethod == "HEAD" ? "GET" : reqMethod;
+    if (!location->isMethodAllowed(methodForCheck)) {
             Logger::debug("Method not allowed for this location; returning 405 (pre-CGI)");
             _response = Response::createErrorResponse(HTTP_METHOD_NOT_ALLOWED);
             const std::vector<std::string>& allowed = location->getAllowedMethods();
@@ -309,7 +344,9 @@ void Client::processRequest(const class Config& config) {
         // do it now and switch to asynchronous CGI handling instead of returning a 500.
         if (location && location->isCgiRequest(_request.getUri()) && !_cgi) {
             std::string reqMethod = Utils::toUpperCase(_request.getMethod());
-            if (!location->isMethodAllowed(reqMethod)) {
+            // Treat HEAD as GET for permission checks when spawning CGI or early checks
+            std::string methodForCheck = reqMethod == "HEAD" ? "GET" : reqMethod;
+            if (!location->isMethodAllowed(methodForCheck)) {
                 Logger::debug("Method not allowed for this location; returning 405 (pre-CGI)");
                 _response = Response::createErrorResponse(HTTP_METHOD_NOT_ALLOWED);
                 const std::vector<std::string>& allowed = location->getAllowedMethods();
@@ -337,7 +374,9 @@ void Client::processRequest(const class Config& config) {
         }
         if (location) {
             std::string reqMethod = Utils::toUpperCase(_request.getMethod());
-            bool methodAllowed = location->isMethodAllowed(reqMethod);
+            // HEAD should be allowed anywhere GET is allowed
+            std::string methodForCheck = reqMethod == "HEAD" ? "GET" : reqMethod;
+            bool methodAllowed = location->isMethodAllowed(methodForCheck);
             if (!methodAllowed) {
                 _response = Response::createErrorResponse(HTTP_METHOD_NOT_ALLOWED);
                 const std::vector<std::string>& allowed = location->getAllowedMethods();
@@ -949,7 +988,10 @@ void Client::finalizeCgiResponse() {
                                             ", actual=" + Utils::intToString((int)actualBodySize));
                             }
                         }
-                        r.setHeader("Content-Length", Utils::intToString((int)actualBodySize));
+                        // Ensure Response object owns the body and Content-Length is consistent
+                        // by setting the body via Response API (it will set Content-Length)
+                        r.setBody(body);
+                        Logger::debug("finalizeCgiResponse: set response body and Content-Length=" + r.getHeader("Content-Length"));
                         // Diagnostics: if this is the ubuntu_tester CGI path, dump header/body size
                         {
                             std::string reqPath = _request.getPath();
@@ -989,8 +1031,9 @@ void Client::finalizeCgiResponse() {
                         }
                         r.setComplete(true);
                         _response = r;
-                        // Build full HTTP message (status+headers+CRLF+body)
-                        _sendBuffer = _response.toString(false) + body;
+                        // Build full HTTP message (status+headers+CRLF+body) using Response::toString()
+                        // which will include the body and correct Content-Length header
+                        _sendBuffer = _response.toString();
                     }
                 }
             }
@@ -1079,7 +1122,12 @@ bool Client::hasTimedOut(int timeoutSeconds) const {
 void Client::reset() {
     _request.reset();
     _response.reset();
-    _receiveBuffer.clear();
+    // IMPORTANT: Do not clear _receiveBuffer here. The connection may have
+    // already received bytes belonging to the next pipelined request while
+    // we're still sending the previous response. Clearing the buffer here
+    // would drop those bytes and can lead to malformed parsing or
+    // unsolicited responses. The buffer will be parsed when the client's
+    // state transitions to RECEIVING_REQUEST.
     _sendBuffer.clear();
     if (_cgi) {
         delete _cgi;
