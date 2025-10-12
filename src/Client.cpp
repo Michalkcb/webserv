@@ -22,6 +22,7 @@
 // Supports CRLFCRLF ("\r\n\r\n") and LF LF ("\n\n").
 // Returns true if a separator was found. On success, header_end_pos is the
 // index of the last header character (exclusive) and sep_len is the separator length.
+
 static bool findHeaderBodySeparator(const std::string& buf, size_t& header_end_pos, size_t& sep_len) {
     size_t pos = buf.find("\r\n\r\n");
     if (pos != std::string::npos) {
