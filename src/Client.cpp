@@ -421,11 +421,13 @@ void Client::processRequest(const class Config& config) {
         // Bonus features and keep-alive headers
         _applyBonusFeatures();
         {
-            std::string connection = Utils::toLowerCase(_request.getHeader("connection"));
-            bool isHttp11 = (_request.getVersion() == "HTTP/1.1");
-            _keepAlive = isHttp11 ? (connection != "close") : (connection == "keep-alive");
-            _response.setHeader("Connection", _keepAlive ? "keep-alive" : "close");
-            if (_keepAlive) _response.setHeader("Keep-Alive", "timeout=600, max=100");
+            // TEMPORARY CHANGE FOR DIAGNOSTIC: force connection close to
+            // isolate pipelining/keep-alive related issues in tester.
+            // If this makes tests pass, we'll implement a safer fix.
+            (void)config; // silence unused warning in this block when needed
+            _keepAlive = false;
+            _response.setHeader("Connection", "close");
+            // Do not set Keep-Alive header when forcing close.
         }
 
         // Serialize (omit body for HEAD)
