@@ -113,6 +113,15 @@ ssize_t Client::receiveData() {
     ssize_t bytesRead = recv(_fd, buffer, sizeof(buffer), 0);
     if (bytesRead > 0) {
         _receiveBuffer.append(buffer, bytesRead);
+        // Diagnostic: append raw received bytes to a per-fd file for transcript
+        // analysis. This is temporary and will be removed after debugging.
+        char recvpath[128];
+        snprintf(recvpath, sizeof(recvpath), "/tmp/recv_fd_%d_%ld.bin", _fd, (long)time(NULL));
+        FILE* rf = fopen(recvpath, "ab");
+        if (rf) {
+            fwrite(buffer, 1, bytesRead, rf);
+            fclose(rf);
+        }
         updateLastActivity();
     } else if (bytesRead == 0) {
         // Peer closed the connection
@@ -421,13 +430,11 @@ void Client::processRequest(const class Config& config) {
         // Bonus features and keep-alive headers
         _applyBonusFeatures();
         {
-            // TEMPORARY CHANGE FOR DIAGNOSTIC: force connection close to
-            // isolate pipelining/keep-alive related issues in tester.
-            // If this makes tests pass, we'll implement a safer fix.
-            (void)config; // silence unused warning in this block when needed
-            _keepAlive = false;
-            _response.setHeader("Connection", "close");
-            // Do not set Keep-Alive header when forcing close.
+            std::string connection = Utils::toLowerCase(_request.getHeader("connection"));
+            bool isHttp11 = (_request.getVersion() == "HTTP/1.1");
+            _keepAlive = isHttp11 ? (connection != "close") : (connection == "keep-alive");
+            _response.setHeader("Connection", _keepAlive ? "keep-alive" : "close");
+            if (_keepAlive) _response.setHeader("Keep-Alive", "timeout=600, max=100");
         }
 
         // Serialize (omit body for HEAD)
