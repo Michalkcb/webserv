@@ -785,9 +785,11 @@ void Client::finalizeCgiResponse() {
     // writer has closed and we've consumed all bytes, read() will return 0.
     if (_cgi && _cgi->getOutputFd() != -1) {
         char drainBuf[BUFFER_SIZE];
+        bool readAny = false;
         for (;;) {
             ssize_t r = _cgi->readFromOutput(drainBuf, sizeof(drainBuf));
             if (r > 0) {
+                readAny = true;
                 _cgiOutputBuffer.append(drainBuf, r);
                 continue; // try to read more
             }
@@ -797,8 +799,15 @@ void Client::finalizeCgiResponse() {
             }
             // r < 0
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                // Nothing immediately available; since the child is finishing,
-                // proceed to finalize with whatever we have.
+                // If we haven't read any bytes yet *and* the CGI child is
+                // still running, then it's likely the CGI simply hasn't
+                // produced output yet. In that case, defer finalization and
+                // wait for the next poll event instead of building a timeout
+                // response now. Otherwise, proceed with whatever we have.
+                if (!readAny && _cgi->isRunning()) {
+                    Logger::debug("finalizeCgiResponse: no CGI output yet and CGI still running; deferring finalization");
+                    return; // let the event loop call us again when data arrives
+                }
                 Logger::debug("finalizeCgiResponse: CGI stdout temporarily EAGAIN; proceeding with buffered output");
                 break;
             } else {
