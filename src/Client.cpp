@@ -113,15 +113,7 @@ ssize_t Client::receiveData() {
     ssize_t bytesRead = recv(_fd, buffer, sizeof(buffer), 0);
     if (bytesRead > 0) {
         _receiveBuffer.append(buffer, bytesRead);
-        // Diagnostic: append raw received bytes to a per-fd file for transcript
-        // analysis. This is temporary and will be removed after debugging.
-        char recvpath[128];
-        snprintf(recvpath, sizeof(recvpath), "/tmp/recv_fd_%d_%ld.bin", _fd, (long)time(NULL));
-        FILE* rf = fopen(recvpath, "ab");
-        if (rf) {
-            fwrite(buffer, 1, bytesRead, rf);
-            fclose(rf);
-        }
+        // (removed temporary diagnostic file writes)
         updateLastActivity();
     } else if (bytesRead == 0) {
         // Peer closed the connection
@@ -137,36 +129,10 @@ ssize_t Client::receiveData() {
 ssize_t Client::sendData() {
     if (_sendBuffer.empty()) return 0;
 
-    // Diagnostic: dump the first part of the send buffer for any send operation
-    // to help diagnose unsolicited responses appearing on idle channels.
-    {
-        size_t preview = std::min((size_t)256, _sendBuffer.size());
-        std::string previewStr = _sendBuffer.substr(0, preview);
-        char outpath_all[128];
-        snprintf(outpath_all, sizeof(outpath_all), "/tmp/send_dump_fd_%d_%ld.txt", _fd, (long)time(NULL));
-        FILE* f = fopen(outpath_all, "w");
-        if (f) {
-            fwrite(previewStr.data(), 1, previewStr.size(), f);
-            fclose(f);
-            Logger::debug(std::string("Wrote send preview to: ") + outpath_all);
-        }
-    }
 
     ssize_t bytesSent = send(_fd, _sendBuffer.data(), _sendBuffer.size(), MSG_NOSIGNAL);
     if (bytesSent > 0) {
-        // Diagnostic: dump the exact bytes we are sending for HEAD requests
-        // to help debug tester failures around unexpected status codes.
-        if (_request.getMethod() == "HEAD") {
-            std::string sentChunk = _sendBuffer.substr(0, bytesSent);
-            char outpath[128];
-            snprintf(outpath, sizeof(outpath), "/tmp/sent_fd_%d_%ld.bin", _fd, (long)time(NULL));
-            FILE* fout = fopen(outpath, "wb");
-            if (fout) {
-                fwrite(sentChunk.data(), 1, sentChunk.size(), fout);
-                fclose(fout);
-            }
-            Logger::debug(std::string("Wrote HEAD send dump to: ") + outpath);
-        }
+        // (removed temporary diagnostic send dumps)
 
         _sendBuffer.erase(0, bytesSent);
         updateLastActivity();
@@ -857,13 +823,7 @@ void Client::finalizeCgiResponse() {
         _cgi->terminate();
         _response = Response::createErrorResponse(HTTP_REQUEST_TIMEOUT);
     } else {
-        // Write raw CGI buffer to disk for diagnostics
-        Logger::debug("Creating /tmp/cgi_raw_input_before_parse.bin(CPP707)");
-        FILE* dbg = fopen("/tmp/cgi_raw_input_before_parse.bin", "wb");
-        if (dbg) {
-            fwrite(_cgiOutputBuffer.data(), 1, _cgiOutputBuffer.size(), dbg);
-            fclose(dbg);
-        }
+        // (removed temporary CGI raw buffer dump)
 
         Logger::debug("Finalizing CGI with buffer length (CPP714): " + Utils::intToString((int)_cgiOutputBuffer.length()));
 
@@ -1066,37 +1026,7 @@ void Client::finalizeCgiResponse() {
         _sendBuffer = _response.toString();
     }
 
-    FILE* ff = fopen("/tmp/final_send_buffer.bin", "wb");
-    if (ff) {
-        fwrite(_sendBuffer.data(), 1, _sendBuffer.size(), ff);
-        fclose(ff);
-    }
-    FILE* fi = fopen("/tmp/cgi_raw_stdin_before_write.bin", "wb");
-    if (fi) {
-        fwrite(_cgiInputCopy.data(), 1, _cgiInputCopy.size(), fi);
-        fclose(fi);
-    }
-    // Dump full CGI stdout+stderr when finalizing
-    {
-        static int raw_seq2 = 0;
-        char outpath2[256];
-        snprintf(outpath2, sizeof(outpath2), "/tmp/cgi_stdout_stderr_%d_%d.txt", _fd, ++raw_seq2);
-        Logger::debug(std::string("Attempting to write final CGI stdout/stderr dump to: ") + outpath2);
-        FILE* fout2 = fopen(outpath2, "w");
-        if (fout2) {
-            size_t wrote1 = fprintf(fout2, "==== CGI stdout+stderr dump (client fd=%d) ===\n", _fd);
-            size_t wrote2 = 0;
-            if (!_cgiOutputBuffer.empty()) {
-                wrote2 = fwrite(_cgiOutputBuffer.data(), 1, _cgiOutputBuffer.size(), fout2);
-            }
-            size_t wrote3 = fprintf(fout2, "\n==== end dump ===\n");
-            fclose(fout2);
-            Logger::debug(std::string("Wrote final CGI dump to: ") + outpath2 + ", header_bytes=" + Utils::intToString((int)wrote1) + ", body_bytes=" + Utils::intToString((int)wrote2) + ", trailer_bytes=" + Utils::intToString((int)wrote3));
-        } else {
-            int serr = errno;
-            Logger::error(std::string("Could not write final CGI stdout/stderr dump to ") + outpath2 + ": " + strerror(serr) + " (errno=" + Utils::intToString(serr) + ")");
-        }
-    }
+    // (removed temporary CGI finalization dumps)
     _cgiOutputBuffer.clear();
     _state = SENDING_RESPONSE;
 }
