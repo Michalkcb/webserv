@@ -244,14 +244,18 @@ bool CGI::isRunning() const {
 
     int status;
     int result = waitpid(_pid, &status, WNOHANG);
-    Logger::debug("CGI::isRunning() waitpid result=" + Utils::intToString(result) + ", pid=" + Utils::intToString(_pid) + ", errno=" + Utils::intToString(errno));
+    // Avoid noisy logs when child is still running (result == 0). Only
+    // log when the child has changed state or an error occurred.
+    if (result != 0) {
+        Logger::debug("CGI::isRunning() waitpid result=" + Utils::intToString(result) + ", pid=" + Utils::intToString(_pid) + ", errno=" + Utils::intToString(errno));
+    }
     if (result == _pid) { // child transitioned to a waited state
         Logger::debug("CGI::isRunning(): child has exited or changed state (status=" + Utils::intToString(status) + ")");
         const_cast<CGI*>(this)->_isRunning = false;
         return false;
     }
     if (result == -1) { // error => treat as finished
-        Logger::debug("CGI::isRunning(): waitpid error: " + std::string(strerror(errno)));
+        Logger::error("CGI::isRunning(): waitpid error: " + std::string(strerror(errno)));
         const_cast<CGI*>(this)->_isRunning = false;
         return false;
     }

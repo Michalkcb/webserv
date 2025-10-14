@@ -404,11 +404,11 @@ void Client::processRequest(const class Config& config) {
         }
 
         // Serialize (omit body for HEAD)
-        if (_request.getMethod() == "HEAD") {
-            _sendBuffer = _response.toString(false);
-        } else {
-            _sendBuffer = _response.toString();
-        }
+        bool includeBody = (_request.getMethod() != "HEAD");
+        _sendBuffer = _response.toString(includeBody);
+        Logger::debug("Prepared response for " + _request.getMethod() + " " + _request.getPath() +
+                      " status=" + Utils::intToString(_response.getStatusCode()) +
+                      " includeBody=" + (includeBody ? "1" : "0"));
         _state = SENDING_RESPONSE;
     }
 }

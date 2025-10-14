@@ -87,7 +87,7 @@ void Server::run() {
             continue;
         }
 
-        Logger::debug("Polling " + Utils::intToString(_pollFds.size()) + " file descriptors...");
+    // Minimal debug to avoid hot-loop spam; only log when verbose level enabled elsewhere
         int poll_count = poll(&_pollFds[0], _pollFds.size(), 100); // 100ms timeout for better responsiveness
 
         if (poll_count < 0) {
@@ -495,8 +495,12 @@ void Server::_checkCgiCompletion() {
             time_t now = time(NULL);
             time_t secondsSinceClientActivity = now - client.getLastActivity();
 
-            Logger::debug("Server::_checkCgiCompletion: client=" + Utils::intToString(it->first) + ", cgiFinished=" + std::string(cgiFinished ? "true" : "false") + ", cgiTimedOut=" + std::string(cgiTimedOut ? "true" : "false") + ", clientState=" + Utils::intToString(client.getState()) + ", clientIdle=" + std::string(clientIdle ? "true" : "false") + ", secSinceActivity=" + Utils::intToString((int)secondsSinceClientActivity));
-
+            // Only log detailed CGI completion diagnostics when we actually
+            // intend to finalize or when the CGI timed out/finished — avoid
+            // spamming logs every loop iteration.
+            if (cgiFinished || cgiTimedOut) {
+                Logger::debug("Server::_checkCgiCompletion: client=" + Utils::intToString(it->first) + ", cgiFinished=" + std::string(cgiFinished ? "true" : "false") + ", cgiTimedOut=" + std::string(cgiTimedOut ? "true" : "false") + ", clientState=" + Utils::intToString(client.getState()) + ", clientIdle=" + std::string(clientIdle ? "true" : "false") + ", secSinceActivity=" + Utils::intToString((int)secondsSinceClientActivity));
+            }
             // Only finalize on CGI timeout if the client has been idle for the
             // configured timeout AND a short grace period has passed since the
             // client's last activity. This avoids races where the client is
