@@ -15,20 +15,9 @@ Server::Server(const std::string& configFile) : _running(false) {
     loadConfig(configFile);
 }
 
-Server::Server(const Server& other) {
-    *this = other;
-}
-
-Server& Server::operator=(const Server& other) {
-    if (this != &other) {
-        _config = other._config;
-        _serverSockets = other._serverSockets;
-        _clients = other._clients;
-        _pollFds = other._pollFds;
-        _running = other._running;
-    }
-    return *this;
-}
+// Server is intentionally non-copyable. Copy constructor and assignment
+// operator are declared private in the header and not defined here to
+// prevent accidental copying of heavy resources (sockets, clients, etc.).
 
 Server::~Server() {
     stop();
@@ -87,7 +76,7 @@ void Server::run() {
             continue;
         }
 
-    // Minimal debug to avoid hot-loop spam; only log when verbose level enabled elsewhere
+        Logger::debug("Polling " + Utils::intToString(_pollFds.size()) + " file descriptors...");
         int poll_count = poll(&_pollFds[0], _pollFds.size(), 100); // 100ms timeout for better responsiveness
 
         if (poll_count < 0) {
@@ -121,28 +110,28 @@ void Server::_updatePollFds() {
     }
 
     // 2. Add all client sockets and their CGI pipes
-    for (std::map<int, Client>::iterator it = _clients.begin(); it != _clients.end(); ++it) {
-        Client& client = it->second;
+    for (std::map<int, Client*>::iterator it = _clients.begin(); it != _clients.end(); ++it) {
+        Client* client = it->second;
 
         // Add the client's main socket
-        struct pollfd client_pfd = {client.getFd(), POLLIN, 0};
-        if (client.getState() == Client::SENDING_RESPONSE || !client.getSendBuffer().empty()) {
+    struct pollfd client_pfd = {client->getFd(), POLLIN, 0};
+        if (client->getState() == Client::SENDING_RESPONSE || !client->getSendBuffer().empty()) {
             client_pfd.events |= POLLOUT;
         }
         _pollFds.push_back(client_pfd);
 
         // If client is waiting to write to a CGI, monitor its input pipe for writability
-        if (client.isWaitingForCgiWrite()) {
-            if (client.getCgi() && client.getCgi()->getInputFd() != -1) {
-                struct pollfd cgi_in_pfd = {client.getCgi()->getInputFd(), POLLOUT, 0};
+        if (client->isWaitingForCgiWrite()) {
+            if (client->getCgi() && client->getCgi()->getInputFd() != -1) {
+                struct pollfd cgi_in_pfd = {client->getCgi()->getInputFd(), POLLOUT, 0};
                 _pollFds.push_back(cgi_in_pfd);
             }
         }
 
         // If a CGI is running, monitor its output pipe for readability
-        if ((client.getState() == Client::CGI_PROCESSING || client.getState() == Client::CGI_STREAMING_BODY) && client.getCgi()) {
-            if (client.getCgi()->getOutputFd() != -1) {
-                struct pollfd cgi_out_pfd = {client.getCgi()->getOutputFd(), POLLIN, 0};
+        if ((client->getState() == Client::CGI_PROCESSING || client->getState() == Client::CGI_STREAMING_BODY) && client->getCgi()) {
+            if (client->getCgi()->getOutputFd() != -1) {
+                struct pollfd cgi_out_pfd = {client->getCgi()->getOutputFd(), POLLIN, 0};
                 _pollFds.push_back(cgi_out_pfd);
             }
         }
@@ -165,8 +154,8 @@ void Server::_handlePollEvents() {
     std::vector<int> clients_to_remove;
 
     // Check for events on client sockets and CGI pipes
-    for (std::map<int, Client>::iterator it = _clients.begin(); it != _clients.end(); ++it) {
-        Client& client = it->second;
+    for (std::map<int, Client*>::iterator it = _clients.begin(); it != _clients.end(); ++it) {
+        Client* client = it->second;
         int clientFd = it->first;
 
         // Find the pollfd for the client's main socket, input pipe, and output pipe
@@ -177,19 +166,19 @@ void Server::_handlePollEvents() {
             if (revents == 0) continue;
 
             // Event on the client's main socket
-            if (current_fd == clientFd) {
+                    if (current_fd == clientFd) {
                 // Handle HUP/ERR carefully: if we still have data to send, try to flush it.
-                if (revents & (POLLHUP | POLLERR)) {
+                        if (revents & (POLLHUP | POLLERR)) {
                     // Mark peer as closed to stop expecting more reads
-                    client.markPeerClosed();
-                    Logger::debug("Poll revents on client fd=" + Utils::intToString(clientFd) + ": HUP/ERR. sendBufferLen=" + Utils::intToString((int)client.getSendBuffer().length()));
+                    client->markPeerClosed();
+                    Logger::debug("Poll revents on client fd=" + Utils::intToString(clientFd) + ": HUP/ERR. sendBufferLen=" + Utils::intToString((int)client->getSendBuffer().length()));
                     // Still attempt to send any remaining data
-                    if (!client.getSendBuffer().empty()) {
-                        client.sendData();
-                    }
+                            if (!client->getSendBuffer().empty()) {
+                                client->sendData();
+                            }
                     // If nothing to send, finish the client
-                    if (client.getSendBuffer().empty()) {
-                        client.setState(Client::FINISHED);
+                    if (client->getSendBuffer().empty()) {
+                        client->setState(Client::FINISHED);
                     }
                 } else {
                     // Handle POLLOUT before POLLIN to avoid a race where we
@@ -198,31 +187,31 @@ void Server::_handlePollEvents() {
                     // bytes of the next pipelined request within the same
                     // poll iteration. Sending first allows the reset to occur
                     // before we read the next request, preserving correctness.
-                    if (revents & POLLOUT) {
-                        Logger::debug("POLLOUT on fd=" + Utils::intToString(clientFd) + ", sendBufferLen=" + Utils::intToString((int)client.getSendBuffer().length()));
-                        client.sendData();
-                    }
-                    if (revents & POLLIN)  {
-                        Logger::debug("POLLIN on fd=" + Utils::intToString(clientFd));
-                        client.receiveData();
-                        client.processRequest(_config);
-                    }
+                        if (revents & POLLOUT) {
+                            Logger::debug("POLLOUT on fd=" + Utils::intToString(clientFd) + ", sendBufferLen=" + Utils::intToString((int)client->getSendBuffer().length()));
+                            client->sendData();
+                        }
+                        if (revents & POLLIN)  {
+                            Logger::debug("POLLIN on fd=" + Utils::intToString(clientFd));
+                            client->receiveData();
+                            client->processRequest(_config);
+                        }
                 }
             }
 
             // Events on the client's CGI pipes
-            if ((client.getState() == Client::CGI_PROCESSING || client.getState() == Client::CGI_STREAMING_BODY) && client.getCgi()) {
-                if (current_fd == client.getCgi()->getInputFd() && (revents & POLLOUT)) {
-                    client.handleCgiInput();
+            if ((client->getState() == Client::CGI_PROCESSING || client->getState() == Client::CGI_STREAMING_BODY) && client->getCgi()) {
+                if (current_fd == client->getCgi()->getInputFd() && (revents & POLLOUT)) {
+                    client->handleCgiInput();
                 }
-                if (current_fd == client.getCgi()->getOutputFd() && (revents & POLLIN)) {
-                    client.handleCgiOutput();
+                if (current_fd == client->getCgi()->getOutputFd() && (revents & POLLIN)) {
+                    client->handleCgiOutput();
                 }
             }
         }
 
         // Check if the client's state has changed to finished
-        if (client.getState() == Client::FINISHED || client.getState() == Client::ERROR_STATE) {
+        if (client->getState() == Client::FINISHED || client->getState() == Client::ERROR_STATE) {
             clients_to_remove.push_back(clientFd);
         }
     }
@@ -368,45 +357,48 @@ void Server::_acceptNewConnection(int serverSocket) {
         Logger::debug(std::string("Accepted fd link: ") + fdPath + " -> (readlink failed: " + std::string(strerror(errno)) + ")");
     }
     
-    _clients[clientSocket] = Client(clientSocket);
+    // Allocate Client on the heap to ensure single owner semantics
+    Client* newClient = new Client(clientSocket);
+    _clients[clientSocket] = newClient;
 }
 
 void Server::_handleClientRead(int clientFd) {
-    std::map<int, Client>::iterator it = _clients.find(clientFd);
+    std::map<int, Client*>::iterator it = _clients.find(clientFd);
     if (it == _clients.end()) return;
     
-    Client& client = it->second;
-    ssize_t bytesRead = client.receiveData();
+    Client* client = it->second;
+    ssize_t bytesRead = client->receiveData();
     
     // Close connection if client disconnected or there's a real error
     if ((bytesRead == 0) ||
         (bytesRead < 0 && errno != EAGAIN && errno != EWOULDBLOCK) ||
-        client.getState() == Client::FINISHED || 
-        client.getState() == Client::ERROR_STATE) {
+        client->getState() == Client::FINISHED || 
+        client->getState() == Client::ERROR_STATE) {
         _closeClient(clientFd);
         return;
     }
     
-    client.processRequest(_config);
+    client->processRequest(_config);
 }
 
 void Server::_handleClientWrite(int clientFd) {
-    std::map<int, Client>::iterator it = _clients.find(clientFd);
+    std::map<int, Client*>::iterator it = _clients.find(clientFd);
     if (it == _clients.end()) return;
     
-    Client& client = it->second;
-    ssize_t bytesSent = client.sendData();
+    Client* client = it->second;
+    ssize_t bytesSent = client->sendData();
     
-    if (bytesSent < 0 || client.getState() == Client::FINISHED || client.getState() == Client::ERROR_STATE) {
+    if (bytesSent < 0 || client->getState() == Client::FINISHED || client->getState() == Client::ERROR_STATE) {
         _closeClient(clientFd);
     }
 }
 
 void Server::_closeClient(int clientFd) {
-    std::map<int, Client>::iterator it = _clients.find(clientFd);
+    std::map<int, Client*>::iterator it = _clients.find(clientFd);
     if (it != _clients.end()) {
-    Logger::debug("Closing client connection (fd: " + Utils::intToString(clientFd) + ", state=" + Utils::intToString((int)it->second.getState()) + ", lastActivity=" + Utils::intToString((int)it->second.getLastActivity()) + ", sendBufferLen=" + Utils::intToString((int)it->second.getSendBuffer().length()) + ")");
-        it->second.close();
+    Logger::debug("Closing client connection (fd: " + Utils::intToString(clientFd) + ", state=" + Utils::intToString((int)it->second->getState()) + ", lastActivity=" + Utils::intToString((int)it->second->getLastActivity()) + ", sendBufferLen=" + Utils::intToString((int)it->second->getSendBuffer().length()) + ")");
+        it->second->close();
+        delete it->second;
         _clients.erase(it);
     }
 }
@@ -414,7 +406,7 @@ void Server::_closeClient(int clientFd) {
 void Server::_handleTimeout() {
     std::vector<int> clientsToClose;
     
-    for (std::map<int, Client>::iterator it = _clients.begin(); it != _clients.end(); ++it) {
+    for (std::map<int, Client*>::iterator it = _clients.begin(); it != _clients.end(); ++it) {
         // If the client appears to have timed out, consider closing it.
         // However, avoid closing clients that are actively sending a response
         // with remaining data in their send buffer — closing them causes the
@@ -423,10 +415,10 @@ void Server::_handleTimeout() {
         // the connection truly becomes idle for a longer period.
         // Use a more generous idle timeout to accommodate slow large uploads
     const int IDLE_TIMEOUT_SECONDS = 600; // allow long interactive pauses
-        if (it->second.hasTimedOut(IDLE_TIMEOUT_SECONDS)) {
+    if (it->second->hasTimedOut(IDLE_TIMEOUT_SECONDS)) {
             // If the client is still streaming a request body (e.g., large POST)
             // and the request isn't complete yet, do not close on idle timeout.
-            if (!it->second.getRequest().isComplete() && it->second.getRequest().isStreamingMode()) {
+            if (!it->second->getRequest().isComplete() && it->second->getRequest().isStreamingMode()) {
                 Logger::debug("Skipping timeout close for client " + Utils::intToString(it->first) + " because it is still uploading request body");
                 continue;
             }
@@ -434,17 +426,17 @@ void Server::_handleTimeout() {
             // and the CGI child is still running, do not close the client.
             // Long uploads may complete well before the CGI finishes, so
             // closing here causes truncated responses or false timeouts.
-            if ((it->second.getState() == Client::CGI_PROCESSING || it->second.getState() == Client::CGI_STREAMING_BODY) &&
-                it->second.getCgi() && it->second.getCgi()->isRunning()) {
-                Logger::debug("Skipping timeout close for client " + Utils::intToString(it->first) + " because CGI is running (state=" + Utils::intToString((int)it->second.getState()) + ")");
+            if ((it->second->getState() == Client::CGI_PROCESSING || it->second->getState() == Client::CGI_STREAMING_BODY) &&
+                it->second->getCgi() && it->second->getCgi()->isRunning()) {
+                Logger::debug("Skipping timeout close for client " + Utils::intToString(it->first) + " because CGI is running (state=" + Utils::intToString((int)it->second->getState()) + ")");
                 continue;
             }
 
             // Also skip closing if we're currently in SENDING_RESPONSE and there
             // is still data left to send. This prevents premature EOF for
             // large responses (e.g., CGI-generated bodies).
-            if (it->second.getState() == Client::SENDING_RESPONSE && !it->second.getSendBuffer().empty()) {
-                Logger::debug("Skipping timeout close for client " + Utils::intToString(it->first) + " because it is actively sending response (sendBufferLen=" + Utils::intToString((int)it->second.getSendBuffer().length()) + ")");
+            if (it->second->getState() == Client::SENDING_RESPONSE && !it->second->getSendBuffer().empty()) {
+                Logger::debug("Skipping timeout close for client " + Utils::intToString(it->first) + " because it is actively sending response (sendBufferLen=" + Utils::intToString((int)it->second->getSendBuffer().length()) + ")");
                 continue;
             }
 
@@ -453,15 +445,16 @@ void Server::_handleTimeout() {
     }
     
     for (size_t i = 0; i < clientsToClose.size(); ++i) {
-        Logger::debug("Client " + Utils::intToString(clientsToClose[i]) + " timed out");
+            Logger::debug("Client " + Utils::intToString(clientsToClose[i]) + " timed out");
         _closeClient(clientsToClose[i]);
     }
 }
 
 void Server::_cleanup() {
     // Close all client connections
-    for (std::map<int, Client>::iterator it = _clients.begin(); it != _clients.end(); ++it) {
-        it->second.close();
+    for (std::map<int, Client*>::iterator it = _clients.begin(); it != _clients.end(); ++it) {
+        it->second->close();
+        delete it->second;
     }
     _clients.clear();
     
@@ -475,10 +468,10 @@ void Server::_cleanup() {
 }
 
 void Server::_checkCgiCompletion() {
-    for (std::map<int, Client>::iterator it = _clients.begin(); it != _clients.end(); ++it) {
-        Client& client = it->second;
-        if ((client.getState() == Client::CGI_PROCESSING || client.getState() == Client::CGI_STREAMING_BODY) && client.getCgi()) {
-            CGI* cgi = client.getCgi();
+    for (std::map<int, Client*>::iterator it = _clients.begin(); it != _clients.end(); ++it) {
+        Client* client = it->second;
+        if ((client->getState() == Client::CGI_PROCESSING || client->getState() == Client::CGI_STREAMING_BODY) && client->getCgi()) {
+            CGI* cgi = client->getCgi();
             
             // Check if CGI has finished OR appears to have timed out.
             // Only treat as timed out if both the CGI shows inactivity
@@ -491,16 +484,12 @@ void Server::_checkCgiCompletion() {
             // CGI_PROCESSING (or is otherwise idle).
             bool cgiFinished = cgi->isFinished();
             bool cgiTimedOut = cgi->hasTimedOut(600); // 10 minutes for large uploads
-            bool clientIdle = client.hasTimedOut(30);
+            bool clientIdle = client->hasTimedOut(30);
             time_t now = time(NULL);
-            time_t secondsSinceClientActivity = now - client.getLastActivity();
+            time_t secondsSinceClientActivity = now - client->getLastActivity();
 
-            // Only log detailed CGI completion diagnostics when we actually
-            // intend to finalize or when the CGI timed out/finished — avoid
-            // spamming logs every loop iteration.
-            if (cgiFinished || cgiTimedOut) {
-                Logger::debug("Server::_checkCgiCompletion: client=" + Utils::intToString(it->first) + ", cgiFinished=" + std::string(cgiFinished ? "true" : "false") + ", cgiTimedOut=" + std::string(cgiTimedOut ? "true" : "false") + ", clientState=" + Utils::intToString(client.getState()) + ", clientIdle=" + std::string(clientIdle ? "true" : "false") + ", secSinceActivity=" + Utils::intToString((int)secondsSinceClientActivity));
-            }
+            Logger::debug("Server::_checkCgiCompletion: client=" + Utils::intToString(it->first) + ", cgiFinished=" + std::string(cgiFinished ? "true" : "false") + ", cgiTimedOut=" + std::string(cgiTimedOut ? "true" : "false") + ", clientState=" + Utils::intToString(client->getState()) + ", clientIdle=" + std::string(clientIdle ? "true" : "false") + ", secSinceActivity=" + Utils::intToString((int)secondsSinceClientActivity));
+
             // Only finalize on CGI timeout if the client has been idle for the
             // configured timeout AND a short grace period has passed since the
             // client's last activity. This avoids races where the client is
@@ -513,19 +502,26 @@ void Server::_checkCgiCompletion() {
             if (cgiFinished || (cgiTimedOut && clientIdle)) {
                 Logger::debug("CGI completion or timeout detected for client " + Utils::intToString(it->first));
                 // Read any remaining bytes from CGI
-                client.handleCgiOutput();
+                client->handleCgiOutput();
 
                 // IMPORTANT: If CGI finished but the client request is not complete yet,
                 // defer finalization until the upload completes to avoid closing the
                 // connection while the client is still writing (broken pipe).
-                if (cgiFinished && !client.getRequest().isComplete()) {
+                if (cgiFinished && !client->getRequest().isComplete()) {
                     Logger::debug("Deferring CGI finalization: client still uploading request body.");
                     continue;
                 }
 
-                // Finalize the response now.
-                if (client.getState() != Client::FINISHED && client.getState() != Client::ERROR_STATE) {
-                    client.finalizeCgiResponse();
+                // Finalize the response now. However, handleCgiOutput() may
+                // already have finalized and cleaned up the CGI (clearing the
+                // client's CGI pointer). Re-check the client's CGI pointer and
+                // state to avoid calling finalizeCgiResponse() twice.
+                if (client->getState() != Client::FINISHED && client->getState() != Client::ERROR_STATE) {
+                    if (client->getCgi() == NULL) {
+                        Logger::debug("Server::_checkCgiCompletion: CGI already finalized by handleCgiOutput(), skipping finalizeCgiResponse\n");
+                    } else {
+                        client->finalizeCgiResponse();
+                    }
                 }
             }
         }

@@ -9,7 +9,7 @@ class Server {
 private:
     Config _config;
     std::vector<int> _serverSockets;
-    std::map<int, Client> _clients;
+    std::map<int, Client*> _clients;
     std::vector<struct pollfd> _pollFds;
     bool _running;
     
@@ -46,8 +46,6 @@ private:
 public:
     Server();
     Server(const std::string& configFile);
-    Server(const Server& other);
-    Server& operator=(const Server& other);
     ~Server();
 
     // Server control
@@ -63,6 +61,10 @@ public:
     // Signal handling
     static void signalHandler(int signal);
     static Server* instance;
+private:
+    // Non-copyable
+    Server(const Server& other);
+    Server& operator=(const Server& other);
 };
 
 #endif

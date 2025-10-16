@@ -47,6 +47,7 @@ private:
     // When CGI provides Content-Length, track how many body bytes remain to stream.
     // SIZE_MAX (or (size_t)-1) indicates unknown/not set (i.e., deferred mode).
     size_t _cgiBodyRemaining;
+    
 
 public:
     Client();
@@ -71,6 +72,7 @@ public:
     void setKeepAlive(bool keepAlive);
     void setCgi(CGI* cgi);
 
+    
     // Request/Response handling
     ssize_t receiveData();
     ssize_t sendData();
@@ -94,10 +96,18 @@ public:
     void handleCgiInput();
     void handleCgiOutput();
     void finalizeCgiResponse();
+    bool isCgiFinalized() const;
     bool isCgiReady() const;
     bool isWaitingForCgiWrite() const;
 
 private:
+    // Make Client non-copyable at the API level: copy ctor and assignment
+    // are declared but not publicly usable. They remain declared here to
+    // avoid accidental implicit generation; Server will store pointers so
+    // copies should not be necessary.
+    // Note: definitions may exist in the .cpp for diagnostic logs but we
+    // mark these as private to prevent accidental external copying.
+    // (If you prefer, remove definitions from src/Client.cpp as well.)
     // Request handlers
     Response _handleGetRequest(const Config::ServerBlock& serverConfig, const Location* location);
     Response _handlePostRequest(const Config::ServerBlock& serverConfig, const Location* location);
@@ -112,6 +122,9 @@ private:
     void _applyRangeRequests();
 
     size_t _cgiBodyOffset;
+    unsigned long _clientNumber;
+    // Mark whether finalizeCgiResponse() has already been executed for this CGI
+    bool _cgiFinalized;
     size_t _stageBodyChunkForCgi(size_t maxBytes);
 };
 

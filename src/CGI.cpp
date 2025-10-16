@@ -11,11 +11,10 @@
 #include <fstream>
 #include <dirent.h>
 
-CGI::CGI() : _pid(-1), _inputFd(-1), _outputFd(-1), _isRunning(false),
+CGI::CGI() : _pid(-1), _inputFd(-1), _outputFd(-1), _isRunning(false), _finalized(false),
              _startTime(0), _lastOutputTime(0), _totalBytesRead(0) {}
 
-CGI::CGI(const std::string& cgiPath) : _cgiPath(cgiPath), _pid(-1),
-             _inputFd(-1), _outputFd(-1), _isRunning(false),
+CGI::CGI(const std::string& cgiPath) : _cgiPath(cgiPath), _pid(-1), _inputFd(-1), _outputFd(-1), _isRunning(false), _finalized(false),
              _startTime(0), _lastOutputTime(0), _totalBytesRead(0) {}
 
 // Removed copy ctor / operator= definitions to prevent unsafe copying
@@ -46,6 +45,14 @@ CGI& CGI::operator=(const CGI& other) {
 
 CGI::~CGI() {
     _cleanup();
+}
+
+bool CGI::isFinalized() const {
+    return _finalized;
+}
+
+void CGI::markFinalized() {
+    _finalized = true;
 }
 
 // Add a small helper to dump env when debugging
@@ -244,18 +251,14 @@ bool CGI::isRunning() const {
 
     int status;
     int result = waitpid(_pid, &status, WNOHANG);
-    // Avoid noisy logs when child is still running (result == 0). Only
-    // log when the child has changed state or an error occurred.
-    if (result != 0) {
-        Logger::debug("CGI::isRunning() waitpid result=" + Utils::intToString(result) + ", pid=" + Utils::intToString(_pid) + ", errno=" + Utils::intToString(errno));
-    }
+    Logger::debug("CGI::isRunning() waitpid result=" + Utils::intToString(result) + ", pid=" + Utils::intToString(_pid) + ", errno=" + Utils::intToString(errno));
     if (result == _pid) { // child transitioned to a waited state
         Logger::debug("CGI::isRunning(): child has exited or changed state (status=" + Utils::intToString(status) + ")");
         const_cast<CGI*>(this)->_isRunning = false;
         return false;
     }
     if (result == -1) { // error => treat as finished
-        Logger::error("CGI::isRunning(): waitpid error: " + std::string(strerror(errno)));
+        Logger::debug("CGI::isRunning(): waitpid error: " + std::string(strerror(errno)));
         const_cast<CGI*>(this)->_isRunning = false;
         return false;
     }

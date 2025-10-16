@@ -204,24 +204,7 @@ void Request::_parseHeader(const std::string& line) {
     
     size_t colonPos = line.find(':');
     if (colonPos == std::string::npos) {
-        // If this malformed line actually looks like a request-line (e.g.
-        // "HEAD / HTTP/1.1") it means a pipelined request's request-line
-        // bled into the previous request's header area. Move that line into
-        // _remainingData so the next parse() call can treat it as a new
-        // request-line instead of silently skipping it.
-        std::string trimmed = Utils::trim(line);
-        std::istringstream iss(trimmed);
-        std::string m, t, v;
-        if ((iss >> m >> t >> v) && _isValidMethod(Utils::toUpperCase(m)) && _isValidUri(t) && _isValidVersion(v)) {
-            Logger::debug("Detected embedded request-line inside headers; moving to remainingData: '" + trimmed + "'");
-            // Ensure CRLF terminator so next parse sees a proper request line
-            _remainingData = trimmed + "\r\n";
-            // Treat current parsing as complete (headers effectively finished)
-            _state = PARSE_COMPLETE;
-            return;
-        }
-
-        // Log and skip other malformed header lines
+        // Log and skip malformed header lines instead of throwing
         Logger::debug("Skipping malformed header line: '" + line + "'");
         return;
     }
@@ -429,5 +412,3 @@ bool Request::hasChunkedTimeout(int timeoutSeconds) const {
     
     return false;
 }
-
-

@@ -5,24 +5,27 @@
 #include "Session.hpp"
 #include "Compression.hpp"
 #include "Range.hpp"
-#include "Range.hpp"
 #include <sys/stat.h>
 #include <errno.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <sys/socket.h>
+#include <poll.h>
 #include <dirent.h>
+#include <sys/time.h>
 #include <algorithm>
 #include <cstring>
 #include <cstdlib>
 #include <ctime>
+#include <map>
+#include <fstream>
+#include <sstream>
 
 // Helper: find the end of HTTP-style headers in a buffer.
 // Supports CRLFCRLF ("\r\n\r\n") and LF LF ("\n\n").
 // Returns true if a separator was found. On success, header_end_pos is the
 // index of the last header character (exclusive) and sep_len is the separator length.
-
 static bool findHeaderBodySeparator(const std::string& buf, size_t& header_end_pos, size_t& sep_len) {
     size_t pos = buf.find("\r\n\r\n");
     if (pos != std::string::npos) {
@@ -38,24 +41,37 @@ static bool findHeaderBodySeparator(const std::string& buf, size_t& header_end_p
 static const size_t CGI_WRITE_BUFFER_LIMIT = 256 * 1024U;
 
 // ===== Client lifecycle =====
+// Global client counter to assign compact client numbers for diagnostics
+static unsigned long g_clientCounter = 0;
+
+// forward declaration for lifecycle logging helper (defined later)
+static void appendLifecycleLog(const std::string& line);
+
 Client::Client() : _fd(-1), _state(RECEIVING_REQUEST), _cgi(NULL), _cgiBytesSent(0),
                    _keepAlive(false), _cgiFinishedWaitingForRequest(false),
                    _peerClosed(false), _cgiHeadersSent(false),
                    _sent100Continue(false), _cgiBodyRemaining((size_t)-1),
-                   _cgiBodyOffset(0) { }
+                   _cgiBodyOffset(0), _clientNumber(++g_clientCounter), _cgiFinalized(false) { }
 
 Client::Client(int fd) : _fd(fd), _state(RECEIVING_REQUEST), _cgi(NULL), _cgiBytesSent(0),
                    _keepAlive(false), _cgiFinishedWaitingForRequest(false),
                    _peerClosed(false), _cgiHeadersSent(false),
                    _sent100Continue(false), _cgiBodyRemaining((size_t)-1),
-                   _cgiBodyOffset(0) { }
+                   _cgiBodyOffset(0), _clientNumber(++g_clientCounter), _cgiFinalized(false) { }
 
 Client::Client(const Client& other)
     : _fd(other._fd), _state(other._state), _request(other._request), _response(other._response),
-      _receiveBuffer(other._receiveBuffer), _sendBuffer(other._sendBuffer), _cgiOutputBuffer(other._cgiOutputBuffer),
-      _cgiInputCopy(other._cgiInputCopy), _cgiWriteBuffer(other._cgiWriteBuffer), _lastActivity(other._lastActivity),
+        _receiveBuffer(other._receiveBuffer), _sendBuffer(other._sendBuffer), _cgiOutputBuffer(other._cgiOutputBuffer),
+        _cgiInputCopy(other._cgiInputCopy), _cgiWriteBuffer(other._cgiWriteBuffer), _lastActivity(other._lastActivity),
             _cgi(NULL), _cgiBytesSent(other._cgiBytesSent), _keepAlive(other._keepAlive), _cgiFinishedWaitingForRequest(other._cgiFinishedWaitingForRequest),
-        _peerClosed(other._peerClosed), _cgiHeadersSent(other._cgiHeadersSent), _sent100Continue(other._sent100Continue), _cgiBodyRemaining(other._cgiBodyRemaining) {
+        _peerClosed(other._peerClosed), _cgiHeadersSent(other._cgiHeadersSent), _sent100Continue(other._sent100Continue), _cgiBodyRemaining(other._cgiBodyRemaining), _clientNumber(other._clientNumber), _cgiFinalized(other._cgiFinalized) {
+    // log COPY event
+    {
+        std::ostringstream ss;
+        ss << "COPY this=" << (void*)this << " client=" << _clientNumber << " from_this=" << (void*)&other << " from_client=" << other._clientNumber;
+        if (other._cgi) ss << " cgi_ptr=" << (void*)other._cgi << " cgi_start=" << other._cgi->getStartTime();
+        appendLifecycleLog(ss.str());
+    }
 }
 Client& Client::operator=(const Client& other) {
     if (this != &other) {
@@ -78,11 +94,30 @@ Client& Client::operator=(const Client& other) {
         _cgiHeadersSent = other._cgiHeadersSent;
         _sent100Continue = other._sent100Continue;
         _cgiBodyRemaining = other._cgiBodyRemaining;
+        // log ASSIGN event
+        std::ostringstream ss;
+        ss << "ASSIGN this=" << (void*)this << " client=" << _clientNumber << " from_this=" << (void*)&other << " from_client=" << other._clientNumber;
+        if (other._cgi) ss << " cgi_ptr=" << (void*)other._cgi << " cgi_start=" << other._cgi->getStartTime();
+        appendLifecycleLog(ss.str());
     }
     return *this;
 }
 
+// Lifecycle logging for debugging duplicate finalization and accidental copies
+static void appendLifecycleLog(const std::string& line) {
+    std::ofstream lf("cgi_lifecycle.log", std::ios::app);
+    lf << line << "\n";
+}
+
+
 Client::~Client() {
+    // Log destructor event
+    {
+        std::ostringstream ss;
+        ss << "DTOR this=" << (void*)this << " client=" << _clientNumber;
+        if (_cgi) ss << " cgi_ptr=" << (void*)_cgi << " cgi_start=" << _cgi->getStartTime();
+        appendLifecycleLog(ss.str());
+    }
     if (_cgi) { delete _cgi; _cgi = NULL; }
     _cgiWriteBuffer.clear();
     _cgiInputCopy.clear();
@@ -104,7 +139,18 @@ bool Client::hasPeerClosed() const { return _peerClosed; }
 void Client::setState(State state) { _state = state; }
 void Client::setResponse(const Response& response) { _response = response; }
 void Client::setKeepAlive(bool keepAlive) { _keepAlive = keepAlive; }
-void Client::setCgi(CGI* cgi) { if (_cgi) delete _cgi; _cgi = cgi; }
+void Client::setCgi(CGI* cgi) {
+    if (_cgi) delete _cgi;
+    _cgi = cgi;
+    _cgiFinalized = false;
+    // Log SET_CGI event
+    std::ostringstream ss;
+    ss << "SET_CGI this=" << (void*)this << " client=" << _clientNumber;
+    if (_cgi) ss << " cgi_ptr=" << (void*)_cgi << " cgi_start=" << _cgi->getStartTime();
+    appendLifecycleLog(ss.str());
+}
+
+
 
 void Client::markPeerClosed() { _peerClosed = true; }
 
@@ -113,7 +159,6 @@ ssize_t Client::receiveData() {
     ssize_t bytesRead = recv(_fd, buffer, sizeof(buffer), 0);
     if (bytesRead > 0) {
         _receiveBuffer.append(buffer, bytesRead);
-        // (removed temporary diagnostic file writes)
         updateLastActivity();
     } else if (bytesRead == 0) {
         // Peer closed the connection
@@ -129,11 +174,8 @@ ssize_t Client::receiveData() {
 ssize_t Client::sendData() {
     if (_sendBuffer.empty()) return 0;
 
-
     ssize_t bytesSent = send(_fd, _sendBuffer.data(), _sendBuffer.size(), MSG_NOSIGNAL);
     if (bytesSent > 0) {
-        // (removed temporary diagnostic send dumps)
-
         _sendBuffer.erase(0, bytesSent);
         updateLastActivity();
         if (_sendBuffer.empty()) {
@@ -172,21 +214,13 @@ ssize_t Client::sendData() {
 }
 
 void Client::processRequest(const class Config& config) {
-    // Parse any received data, but only when we're ready to accept a new request.
-    // If we're currently sending a response (SENDING_RESPONSE) we must NOT
-    // parse incoming bytes as a new request yet — doing so can turn a
-    // request-line from a pipelined request into a malformed header if the
-    // Request object's state hasn't been reset. The connection will be
-    // returned to RECEIVING_REQUEST once the response is fully sent and the
-    // Request object has been reset in sendData().
-    if (!_receiveBuffer.empty() && _state == RECEIVING_REQUEST) {
-        Request::ParseState parseState = _request.parse(_receiveBuffer);
-        Logger::debug("Parse result: " + Utils::intToString((int)parseState));
+    // Parse any received data
 
-        // Only clear buffer if parsing is complete or failed
-        if (parseState == Request::PARSE_COMPLETE || parseState == Request::PARSE_ERROR) {
-            _receiveBuffer.clear();
-        }
+    if (!_receiveBuffer.empty()) {
+        Request::ParseState parseState = _request.parse(_receiveBuffer);
+        // Clear buffer after feeding to parser to avoid re-feeding on next call
+        _receiveBuffer.clear();
+        Logger::debug("Parse result: " + Utils::intToString((int)parseState));
 
         // If headers were just parsed (transitioned into PARSE_BODY) and client expects 100-continue,
         // send the interim response once, then continue receiving the body.
@@ -246,10 +280,8 @@ void Client::processRequest(const class Config& config) {
 
     // Early CGI spawn for POST on CGI-mapped locations while body is still streaming
     if (location && location->isCgiRequest(_request.getUri()) && !_cgi) {
-    std::string reqMethod = Utils::toUpperCase(_request.getMethod());
-    // Treat HEAD as GET for permission checks: if GET is allowed, HEAD should be allowed too.
-    std::string methodForCheck = reqMethod == "HEAD" ? "GET" : reqMethod;
-    if (!location->isMethodAllowed(methodForCheck)) {
+        std::string reqMethod = Utils::toUpperCase(_request.getMethod());
+        if (!location->isMethodAllowed(reqMethod)) {
             Logger::debug("Method not allowed for this location; returning 405 (pre-CGI)");
             _response = Response::createErrorResponse(HTTP_METHOD_NOT_ALLOWED);
             const std::vector<std::string>& allowed = location->getAllowedMethods();
@@ -288,6 +320,13 @@ void Client::processRequest(const class Config& config) {
                 return;
             }
 
+            // Log CGI creation (record CGI pointer + start time)
+            {
+                std::ostringstream ss;
+                ss << "CREATED_CGI this=" << (void*)this << " client=" << _clientNumber << " cgi_ptr=" << (void*)_cgi << " cgi_start=" << _cgi->getStartTime();
+                appendLifecycleLog(ss.str());
+            }
+
             // Dechunk only if it was chunked
             if (isChunkedPost && !_request.getBody().empty()) {
                 std::string dechunked;
@@ -319,9 +358,7 @@ void Client::processRequest(const class Config& config) {
         // do it now and switch to asynchronous CGI handling instead of returning a 500.
         if (location && location->isCgiRequest(_request.getUri()) && !_cgi) {
             std::string reqMethod = Utils::toUpperCase(_request.getMethod());
-            // Treat HEAD as GET for permission checks when spawning CGI or early checks
-            std::string methodForCheck = reqMethod == "HEAD" ? "GET" : reqMethod;
-            if (!location->isMethodAllowed(methodForCheck)) {
+            if (!location->isMethodAllowed(reqMethod)) {
                 Logger::debug("Method not allowed for this location; returning 405 (pre-CGI)");
                 _response = Response::createErrorResponse(HTTP_METHOD_NOT_ALLOWED);
                 const std::vector<std::string>& allowed = location->getAllowedMethods();
@@ -349,9 +386,7 @@ void Client::processRequest(const class Config& config) {
         }
         if (location) {
             std::string reqMethod = Utils::toUpperCase(_request.getMethod());
-            // HEAD should be allowed anywhere GET is allowed
-            std::string methodForCheck = reqMethod == "HEAD" ? "GET" : reqMethod;
-            bool methodAllowed = location->isMethodAllowed(methodForCheck);
+            bool methodAllowed = location->isMethodAllowed(reqMethod);
             if (!methodAllowed) {
                 _response = Response::createErrorResponse(HTTP_METHOD_NOT_ALLOWED);
                 const std::vector<std::string>& allowed = location->getAllowedMethods();
@@ -404,11 +439,11 @@ void Client::processRequest(const class Config& config) {
         }
 
         // Serialize (omit body for HEAD)
-        bool includeBody = (_request.getMethod() != "HEAD");
-        _sendBuffer = _response.toString(includeBody);
-        Logger::debug("Prepared response for " + _request.getMethod() + " " + _request.getPath() +
-                      " status=" + Utils::intToString(_response.getStatusCode()) +
-                      " includeBody=" + (includeBody ? "1" : "0"));
+        if (_request.getMethod() == "HEAD") {
+            _sendBuffer = _response.toString(false);
+        } else {
+            _sendBuffer = _response.toString();
+        }
         _state = SENDING_RESPONSE;
     }
 }
@@ -690,6 +725,7 @@ void Client::handleCgiOutput() {
                     _cgiOutputBuffer.clear();
                     if (_cgiBodyRemaining == 0) {
                         // We've already received the entire declared body; finalize now.
+                        Logger::debug("Client::handleCgiOutput: calling finalize (streaming headers path) this=" + Utils::intToString((int)(long)this) + " fd=" + Utils::intToString(_fd));
                         finalizeCgiResponse();
                         return;
                     }
@@ -711,6 +747,7 @@ void Client::handleCgiOutput() {
                     // Ignore any extra bytes beyond the declared Content-Length
                     if (_cgiBodyRemaining == 0) {
                         // We've delivered exactly the declared number of bytes. Finalize now.
+                        Logger::debug("Client::handleCgiOutput: calling finalize (streaming body path) this=" + Utils::intToString((int)(long)this) + " fd=" + Utils::intToString(_fd));
                         finalizeCgiResponse();
                         return;
                     }
@@ -730,6 +767,7 @@ void Client::handleCgiOutput() {
         // EOF on CGI output
         if (_state == CGI_PROCESSING) {
             // Didn't finish parsing headers – finalize with what we have
+            Logger::debug("Client::handleCgiOutput: calling finalize (EOF in CGI_PROCESSING) this=" + Utils::intToString((int)(long)this) + " fd=" + Utils::intToString(_fd));
             finalizeCgiResponse();
             return;
         }
@@ -741,6 +779,7 @@ void Client::handleCgiOutput() {
                 // CGI is finished; cleanup happens in finalizeCgiResponse or later
             } else {
                 // We deferred sending (no Content-Length). Build full response now.
+                Logger::debug("Client::handleCgiOutput: calling finalize (EOF in CGI_STREAMING_BODY) this=" + Utils::intToString((int)(long)this) + " fd=" + Utils::intToString(_fd));
                 finalizeCgiResponse();
             }
             return;
@@ -755,10 +794,57 @@ void Client::handleCgiOutput() {
 }
 
 void Client::finalizeCgiResponse() {
-    Logger::debug("Entered finalizeCgiResponse fd=" + Utils::intToString(_fd) +
-                  " cgi_out_len=" + Utils::intToString((int)_cgiOutputBuffer.length()));
-
+    if (_cgiFinalized) {
+        Logger::debug("finalizeCgiResponse: already finalized for fd=" + Utils::intToString(_fd));
+        return;
+    }
     if (!_cgi) return;
+
+    // Mark as finalized immediately to prevent re-entrancy/log duplication
+    _cgiFinalized = true;
+    // If the CGI execution instance has already been finalized by another
+    // Client object, do nothing. This is an additional guard at the CGI
+    // object level to prevent true double-finalize events when Client
+    // objects are accidentally copied.
+    if (_cgi->isFinalized()) {
+        Logger::debug("finalizeCgiResponse: CGI already finalized at CGI level for fd=" + Utils::intToString(_fd));
+        return;
+    }
+    // Claim finalization on the CGI object so subsequent callers will no-op.
+    _cgi->markFinalized();
+    // Duplicate-detection: track which Client first finalized each CGI pointer
+    // for the *same CGI lifetime*. Heap addresses can be reused after delete,
+    // which would otherwise produce false positives. Include the CGI start
+    // time (unique per execution) in the recorded entry and only treat a
+    // later finalizer as a true duplicate when the start time matches.
+    // C++98: use nested std::pair instead of std::tuple
+    static std::map<void*, std::pair<void*, std::pair<unsigned long, time_t> > > s_finalizers;
+    void* cgi_ptr = (void*)_cgi;
+    time_t cgi_start = _cgi->getStartTime();
+    std::ofstream dbg("finalize_cgi_debug.log", std::ios::app);
+    std::map<void*, std::pair<void*, std::pair<unsigned long, time_t> > >::iterator it = s_finalizers.find(cgi_ptr);
+    if (it != s_finalizers.end()) {
+        void* first_this = it->second.first;
+        unsigned long first_client = it->second.second.first;
+        time_t first_start = it->second.second.second;
+        // If the recorded start time matches the current CGI's start time,
+        // then two different Client objects are finalizing the same running
+        // CGI instance -> real duplicate. If start times differ, the heap
+        // address was reused and we should not treat it as a duplicate.
+        if (first_start == cgi_start && first_this != (void*)this) {
+            dbg << "DUPLICATE_FINALIZE cgi_ptr=" << cgi_ptr
+                << " first_this=" << first_this << " first_client=" << first_client
+                << " new_this=" << (void*)this << " new_client=" << _clientNumber
+                << " new_fd=" << _fd << " cgi_out_len=" << (int)_cgiOutputBuffer.length() << "\n";
+            Logger::error("DUPLICATE finalizeCgiResponse detected for cgi_ptr=");
+        }
+    }
+    // Record (or overwrite) the finalizer for this CGI pointer with its start time
+    s_finalizers[cgi_ptr] = std::make_pair((void*)this, std::make_pair(_clientNumber, cgi_start));
+
+    // Diagnostic entry for the actual finalize event
+    dbg << "Entered finalizeCgiResponse client=" << _clientNumber << " this=" << (void*)this << " fd=" << _fd
+        << " cgi_ptr=" << cgi_ptr << " cgi_out_len=" << (int)_cgiOutputBuffer.length() << "\n";
     bool preserved = false;
 
     // If we've already sent CGI headers (streaming mode), do NOT construct or
@@ -772,6 +858,7 @@ void Client::finalizeCgiResponse() {
         _response.setComplete(true);
         delete _cgi;
         _cgi = NULL;
+        _cgiFinalized = true;
         _state = SENDING_RESPONSE;
         return;
     }
@@ -785,11 +872,9 @@ void Client::finalizeCgiResponse() {
     // writer has closed and we've consumed all bytes, read() will return 0.
     if (_cgi && _cgi->getOutputFd() != -1) {
         char drainBuf[BUFFER_SIZE];
-        bool readAny = false;
         for (;;) {
             ssize_t r = _cgi->readFromOutput(drainBuf, sizeof(drainBuf));
             if (r > 0) {
-                readAny = true;
                 _cgiOutputBuffer.append(drainBuf, r);
                 continue; // try to read more
             }
@@ -799,14 +884,53 @@ void Client::finalizeCgiResponse() {
             }
             // r < 0
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                // If we haven't read any bytes yet *and* the CGI child is
-                // still running, then it's likely the CGI simply hasn't
-                // produced output yet. In that case, defer finalization and
-                // wait for the next poll event instead of building a timeout
-                // response now. Otherwise, proceed with whatever we have.
-                if (!readAny && _cgi->isRunning()) {
-                    Logger::debug("finalizeCgiResponse: no CGI output yet and CGI still running; deferring finalization");
-                    return; // let the event loop call us again when data arrives
+                // If the CGI process is still running, nothing is available now;
+                // proceed with buffered output to avoid blocking. However, if
+                // the CGI has exited (writer closed) and we still see EAGAIN,
+                // it can be a short race where kernel hasn't delivered the last
+                // bytes to the reader yet. Retry a few short times in that case
+                // before giving up to reduce chance of truncation.
+                if (!_cgi->isRunning()) {
+                        const int maxRetries = 10; // increase retries
+                        int retry = 0;
+                        bool gotMore = false;
+                        int outFd = _cgi->getOutputFd();
+                        for (; retry < maxRetries; ++retry) {
+                            struct pollfd pfd;
+                            pfd.fd = outFd;
+                            pfd.events = POLLIN;
+                            pfd.revents = 0;
+                            int pollRes = poll(&pfd, 1, 20); // 20ms
+                            if (pollRes > 0 && (pfd.revents & POLLIN)) {
+                                ssize_t r2 = _cgi->readFromOutput(drainBuf, sizeof(drainBuf));
+                                if (r2 > 0) {
+                                    _cgiOutputBuffer.append(drainBuf, r2);
+                                    gotMore = true;
+                                    // keep trying to drain
+                                    continue;
+                                }
+                                if (r2 == 0) {
+                                    Logger::debug("finalizeCgiResponse: fully drained CGI stdout on retry before building response");
+                                    gotMore = true;
+                                    break;
+                                }
+                                if (errno != EAGAIN && errno != EWOULDBLOCK) {
+                                    Logger::error(std::string("finalizeCgiResponse: error draining CGI stdout on retry: ") + strerror(errno));
+                                    break;
+                                }
+                                // otherwise fallthrough to next retry
+                            } else if (pollRes == 0) {
+                                // timeout, try again
+                                continue;
+                            } else {
+                                // poll error
+                                Logger::error(std::string("finalizeCgiResponse: poll error while waiting for CGI output: ") + strerror(errno));
+                                break;
+                            }
+                        }
+                    if (gotMore) continue; // there may still be bytes; go back to top
+                    Logger::debug("finalizeCgiResponse: CGI stdout temporarily EAGAIN after retries; proceeding with buffered output");
+                    break;
                 }
                 Logger::debug("finalizeCgiResponse: CGI stdout temporarily EAGAIN; proceeding with buffered output");
                 break;
@@ -832,7 +956,13 @@ void Client::finalizeCgiResponse() {
         _cgi->terminate();
         _response = Response::createErrorResponse(HTTP_REQUEST_TIMEOUT);
     } else {
-        // (removed temporary CGI raw buffer dump)
+        // Write raw CGI buffer to disk for diagnostics
+        Logger::debug("Creating /tmp/cgi_raw_input_before_parse.bin(CPP707)");
+        FILE* dbg = fopen("/tmp/cgi_raw_input_before_parse.bin", "wb");
+        if (dbg) {
+            fwrite(_cgiOutputBuffer.data(), 1, _cgiOutputBuffer.size(), dbg);
+            fclose(dbg);
+        }
 
         Logger::debug("Finalizing CGI with buffer length (CPP714): " + Utils::intToString((int)_cgiOutputBuffer.length()));
 
@@ -955,21 +1085,8 @@ void Client::finalizeCgiResponse() {
                         std::string headersStr = _cgiOutputBuffer.substr(0, header_end_pos);
                         std::string body = _cgiOutputBuffer.substr(header_end_pos + sep_len);
                         Response r = _cgi->parseHeaders(headersStr);
-                        // Ensure Content-Length matches actual body size
-                        size_t actualBodySize = body.size();
-                        std::string declaredCL = r.getHeader("Content-Length");
-                        if (!declaredCL.empty()) {
-                            size_t declaredSize = Utils::stringToSize(declaredCL);
-                            if (declaredSize != actualBodySize) {
-                                Logger::debug("CGI Content-Length mismatch: declared=" + 
-                                            Utils::intToString((int)declaredSize) + 
-                                            ", actual=" + Utils::intToString((int)actualBodySize));
-                            }
-                        }
-                        // Ensure Response object owns the body and Content-Length is consistent
-                        // by setting the body via Response API (it will set Content-Length)
-                        r.setBody(body);
-                        Logger::debug("finalizeCgiResponse: set response body and Content-Length=" + r.getHeader("Content-Length"));
+                        // Overwrite/ensure Content-Length is accurate
+                        r.setHeader("Content-Length", Utils::intToString((int)body.size()));
                         // Diagnostics: if this is the ubuntu_tester CGI path, dump header/body size
                         {
                             std::string reqPath = _request.getPath();
@@ -979,10 +1096,8 @@ void Client::finalizeCgiResponse() {
                                     fprintf(fd, "URI: %s\n", reqPath.c_str());
                                     fprintf(fd, "Headers (from CGI):\n%.*s\n", (int)headersStr.size(), headersStr.c_str());
                                     fprintf(fd, "Computed Body Size: %d\n", (int)body.size());
-									
                                     std::string cl_str = r.getHeader("Content-Length");
-									const char* cl = cl_str.c_str();
-
+                                    const char* cl = cl_str.c_str();
                                     fprintf(fd, "Response Content-Length: %s\n", cl && *cl ? cl : "(none)");
                                     // Also dump the final serialized headers we will send
                                     std::string hdrsOnly = r.toString(false);
@@ -1009,9 +1124,8 @@ void Client::finalizeCgiResponse() {
                         }
                         r.setComplete(true);
                         _response = r;
-                        // Build full HTTP message (status+headers+CRLF+body) using Response::toString()
-                        // which will include the body and correct Content-Length header
-                        _sendBuffer = _response.toString();
+                        // Build full HTTP message (status+headers+CRLF+body)
+                        _sendBuffer = _response.toString(false) + body;
                     }
                 }
             }
@@ -1030,12 +1144,43 @@ void Client::finalizeCgiResponse() {
 
     delete _cgi;
     _cgi = NULL;
+    _cgiFinalized = true;
 
     if (!preserved && _sendBuffer.empty()) {
         _sendBuffer = _response.toString();
     }
 
-    // (removed temporary CGI finalization dumps)
+    FILE* ff = fopen("/tmp/final_send_buffer.bin", "wb");
+    if (ff) {
+        fwrite(_sendBuffer.data(), 1, _sendBuffer.size(), ff);
+        fclose(ff);
+    }
+    FILE* fi = fopen("/tmp/cgi_raw_stdin_before_write.bin", "wb");
+    if (fi) {
+        fwrite(_cgiInputCopy.data(), 1, _cgiInputCopy.size(), fi);
+        fclose(fi);
+    }
+    // Dump full CGI stdout+stderr when finalizing
+    {
+        static int raw_seq2 = 0;
+        char outpath2[256];
+        snprintf(outpath2, sizeof(outpath2), "/tmp/cgi_stdout_stderr_%d_%d.txt", _fd, ++raw_seq2);
+        Logger::debug(std::string("Attempting to write final CGI stdout/stderr dump to: ") + outpath2);
+        FILE* fout2 = fopen(outpath2, "w");
+        if (fout2) {
+            size_t wrote1 = fprintf(fout2, "==== CGI stdout+stderr dump (client fd=%d) ===\n", _fd);
+            size_t wrote2 = 0;
+            if (!_cgiOutputBuffer.empty()) {
+                wrote2 = fwrite(_cgiOutputBuffer.data(), 1, _cgiOutputBuffer.size(), fout2);
+            }
+            size_t wrote3 = fprintf(fout2, "\n==== end dump ===\n");
+            fclose(fout2);
+            Logger::debug(std::string("Wrote final CGI dump to: ") + outpath2 + ", header_bytes=" + Utils::intToString((int)wrote1) + ", body_bytes=" + Utils::intToString((int)wrote2) + ", trailer_bytes=" + Utils::intToString((int)wrote3));
+        } else {
+            int serr = errno;
+            Logger::error(std::string("Could not write final CGI stdout/stderr dump to ") + outpath2 + ": " + strerror(serr) + " (errno=" + Utils::intToString(serr) + ")");
+        }
+    }
     _cgiOutputBuffer.clear();
     _state = SENDING_RESPONSE;
 }
@@ -1068,14 +1213,17 @@ bool Client::hasTimedOut(int timeoutSeconds) const {
 }
 
 void Client::reset() {
+    // Log reset event including any CGI pointer/start
+    {
+        std::ostringstream ss;
+        ss << "RESET this=" << (void*)this << " client=" << _clientNumber;
+        if (_cgi) ss << " cgi_ptr=" << (void*)_cgi << " cgi_start=" << _cgi->getStartTime();
+        appendLifecycleLog(ss.str());
+    }
+
     _request.reset();
     _response.reset();
-    // IMPORTANT: Do not clear _receiveBuffer here. The connection may have
-    // already received bytes belonging to the next pipelined request while
-    // we're still sending the previous response. Clearing the buffer here
-    // would drop those bytes and can lead to malformed parsing or
-    // unsolicited responses. The buffer will be parsed when the client's
-    // state transitions to RECEIVING_REQUEST.
+    _receiveBuffer.clear();
     _sendBuffer.clear();
     if (_cgi) {
         delete _cgi;
@@ -1094,6 +1242,7 @@ void Client::reset() {
     _cgiHeadersSent = false;
     _sent100Continue = false;
     _cgiBodyRemaining = (size_t)-1;
+    _cgiFinalized = false;
     // Reset activity timer for new request on keep-alive connection
     updateLastActivity();
 }

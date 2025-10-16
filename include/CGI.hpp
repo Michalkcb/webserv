@@ -18,6 +18,7 @@ private:
     int _inputFd;
     int _outputFd;
     bool _isRunning;
+    bool _finalized;
     time_t _startTime;
     time_t _lastOutputTime;
     size_t _totalBytesRead;
@@ -52,6 +53,11 @@ public:
     int getOutputFd() const;
     time_t getStartTime() const;
     time_t getLastActivityTime() const;
+
+    // Finalization guard: prevents multiple clients from finalizing the same
+    // CGI execution instance (useful when Client objects are copied).
+    bool isFinalized() const;
+    void markFinalized();
     
     // Generate response from CGI output
     Response parseHeaders(const std::string& headersStr);

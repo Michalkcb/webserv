@@ -74,11 +74,7 @@ void Location::setCgiExtension(const std::string& cgiExtension) { _cgiExtension 
 void Location::setMaxBodySize(size_t maxBodySize) { _maxBodySize = maxBodySize; }
 
 bool Location::isMethodAllowed(const std::string& method) const {
-    // Treat HEAD as GET for permission checks: HEAD should be allowed
-    // wherever GET is allowed. Centralizing this here ensures all callers
-    // benefit without needing to remember to map HEAD->GET.
     std::string upperMethod = Utils::toUpperCase(method);
-    if (upperMethod == "HEAD") upperMethod = "GET";
     return std::find(_allowedMethods.begin(), _allowedMethods.end(), upperMethod) != _allowedMethods.end();
 }
 
