@@ -1,3 +1,10 @@
 Entered finalizeCgiResponse client=1 this=0x272199d0 fd=4 cgi_ptr=0x2721af20 cgi_out_len=100000058
 Entered finalizeCgiResponse client=1 this=0x272199d0 fd=4 cgi_ptr=0x2721af20 cgi_out_len=100000058
 Entered finalizeCgiResponse client=1 this=0x272199d0 fd=4 cgi_ptr=0x2721af20 cgi_out_len=100058
+Entered finalizeCgiResponse client=2 this=0x1021a9d0 fd=5 cgi_ptr=0x1024f930 cgi_out_len=100000058
+Entered finalizeCgiResponse client=2 this=0x1021a9d0 fd=5 cgi_ptr=0x1024f930 cgi_out_len=100000058
+Entered finalizeCgiResponse client=2 this=0x1021a9d0 fd=5 cgi_ptr=0x1024f930 cgi_out_len=100058
+Entered finalizeCgiResponse client=1 this=0x240269d0 fd=4 cgi_ptr=0x24031f00 cgi_out_len=100000058
+Entered finalizeCgiResponse client=1 this=0x240269d0 fd=4 cgi_ptr=0x24031f00 cgi_out_len=100000058
+Entered finalizeCgiResponse client=1 this=0x240269d0 fd=4 cgi_ptr=0x24031f00 cgi_out_len=100058
+Entered finalizeCgiResponse client=155 this=0x2415f240 fd=164 cgi_ptr=0x24031f00 cgi_out_len=100000058
