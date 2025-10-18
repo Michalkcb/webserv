@@ -916,55 +916,10 @@ void Client::finalizeCgiResponse() {
             }
             // r < 0
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                // If the CGI process is still running, nothing is available now;
-                // proceed with buffered output to avoid blocking. However, if
-                // the CGI has exited (writer closed) and we still see EAGAIN,
-                // it can be a short race where kernel hasn't delivered the last
-                // bytes to the reader yet. Retry a few short times in that case
-                // before giving up to reduce chance of truncation.
-                if (!_cgi->isRunning()) {
-                        const int maxRetries = 10; // increase retries
-                        int retry = 0;
-                        bool gotMore = false;
-                        int outFd = _cgi->getOutputFd();
-                        for (; retry < maxRetries; ++retry) {
-                            struct pollfd pfd;
-                            pfd.fd = outFd;
-                            pfd.events = POLLIN;
-                            pfd.revents = 0;
-                            int pollRes = poll(&pfd, 1, 20); // 20ms
-                            if (pollRes > 0 && (pfd.revents & POLLIN)) {
-                                ssize_t r2 = _cgi->readFromOutput(drainBuf, sizeof(drainBuf));
-                                if (r2 > 0) {
-                                    _cgiOutputBuffer.append(drainBuf, r2);
-                                    gotMore = true;
-                                    // keep trying to drain
-                                    continue;
-                                }
-                                if (r2 == 0) {
-                                    Logger::debug("finalizeCgiResponse: fully drained CGI stdout on retry before building response");
-                                    gotMore = true;
-                                    break;
-                                }
-                                if (errno != EAGAIN && errno != EWOULDBLOCK) {
-                                    Logger::error(std::string("finalizeCgiResponse: error draining CGI stdout on retry: ") + strerror(errno));
-                                    break;
-                                }
-                                // otherwise fallthrough to next retry
-                            } else if (pollRes == 0) {
-                                // timeout, try again
-                                continue;
-                            } else {
-                                // poll error
-                                Logger::error(std::string("finalizeCgiResponse: poll error while waiting for CGI output: ") + strerror(errno));
-                                break;
-                            }
-                        }
-                    if (gotMore) continue; // there may still be bytes; go back to top
-                    Logger::debug("finalizeCgiResponse: CGI stdout temporarily EAGAIN after retries; proceeding with buffered output");
-                    break;
-                }
-                Logger::debug("finalizeCgiResponse: CGI stdout temporarily EAGAIN; proceeding with buffered output");
+                // Do not perform any local poll() here; rely solely on the main
+                // server event loop to notify us when more data is available.
+                // Proceed with buffered output without blocking.
+                Logger::debug("finalizeCgiResponse: CGI stdout temporarily EAGAIN; proceeding with buffered output (no local poll)");
                 break;
             } else {
                 Logger::error(std::string("finalizeCgiResponse: error draining CGI stdout: ") + strerror(errno));
