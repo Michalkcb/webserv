@@ -673,13 +673,6 @@ void Client::handleCgiInput() {
         updateLastActivity();
         _cgiWriteBuffer.erase(0, bytesWritten);
         _cgiBytesSent += bytesWritten;
-        // Jeśli przesłaliśmy znaczącą część z początku body, zwolnij ją z pamięci
-        if (_cgiBytesSent > 256 * 1024 && _cgiBytesSent % (256 * 1024) < (size_t)bytesWritten) {
-            size_t toDiscard = _cgiBytesSent - _cgiBodyOffset;
-            if (toDiscard > 0) {
-                _request.discardBodyPrefix(toDiscard);
-            }
-        }
         _stageBodyChunkForCgi(CGI_WRITE_BUFFER_LIMIT);
     } else if (bytesWritten == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
         updateLastActivity();
