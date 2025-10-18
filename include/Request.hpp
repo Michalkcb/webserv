@@ -67,6 +67,9 @@ public:
     bool isChunked() const;
     bool isStreamingMode() const;
     bool hasChunkedTimeout(int timeoutSeconds = 60) const;  // Check if chunked upload has timed out
+    // Memory management helpers for large bodies (used by CGI streaming)
+    void discardBodyPrefix(size_t n);
+    size_t getStoredBodySize() const { return _body.size(); }
 
     // Setters
     void setMethod(const std::string& method);

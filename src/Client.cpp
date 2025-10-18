@@ -278,6 +278,23 @@ void Client::processRequest(const class Config& config) {
         return;
     }
 
+    // Early validation: if Content-Length already exceeds allowed max, reject with 413
+    if (allowedMax > 0) {
+        std::string clh = _request.getHeader("content-length");
+        if (!clh.empty() && Utils::isNumber(clh) && Utils::stringToSize(clh) > allowedMax) {
+            Logger::debug("Rejecting request early with 413: Content-Length exceeds maxBody");
+            _response = Response::createErrorResponse(HTTP_PAYLOAD_TOO_LARGE);
+            bool isHttp11 = (_request.getVersion() == "HTTP/1.1");
+            std::string conn = Utils::toLowerCase(_request.getHeader("connection"));
+            _keepAlive = isHttp11 ? (conn != "close") : (conn == "keep-alive");
+            _response.setHeader("Connection", _keepAlive ? "keep-alive" : "close");
+            if (_keepAlive) _response.setHeader("Keep-Alive", "timeout=600, max=100");
+            _sendBuffer = _response.toString();
+            _state = SENDING_RESPONSE;
+            return;
+        }
+    }
+
     // Early CGI spawn for POST on CGI-mapped locations while body is still streaming
     if (location && location->isCgiRequest(_request.getUri()) && !_cgi) {
         std::string reqMethod = Utils::toUpperCase(_request.getMethod());
@@ -305,8 +322,17 @@ void Client::processRequest(const class Config& config) {
             if (!_request.isComplete())
                 return;
 
-            if (_request.getContentLength() > allowedMax || _request.getBody().length() > allowedMax)
+            if (allowedMax > 0 && (_request.getContentLength() > allowedMax || _request.getBody().length() > allowedMax)) {
+                _response = Response::createErrorResponse(HTTP_PAYLOAD_TOO_LARGE);
+                bool isHttp11 = (_request.getVersion() == "HTTP/1.1");
+                std::string conn = Utils::toLowerCase(_request.getHeader("connection"));
+                _keepAlive = isHttp11 ? (conn != "close") : (conn == "keep-alive");
+                _response.setHeader("Connection", _keepAlive ? "keep-alive" : "close");
+                if (_keepAlive) _response.setHeader("Keep-Alive", "timeout=600, max=100");
+                _sendBuffer = _response.toString();
+                _state = SENDING_RESPONSE;
                 return;
+            }
 
             std::string resolvedScriptPath = location ? location->getFullPath(_request.getPath())
                                                   : _request.getPath();
@@ -458,7 +484,12 @@ size_t Client::_stageBodyChunkForCgi(size_t maxBytes) {
     size_t chunk  = std::min(room, avail);
 
     _cgiWriteBuffer.append(body, _cgiBodyOffset, chunk);
-    _cgiInputCopy.append(body, _cgiBodyOffset, chunk);
+    // Nie kopiuj całego body do _cgiInputCopy przy dużych payloadach
+    if (_cgiInputCopy.size() < 64 * 1024) {
+        size_t room = (64 * 1024) - _cgiInputCopy.size();
+        size_t take = std::min(room, chunk);
+        if (take > 0) _cgiInputCopy.append(body, _cgiBodyOffset, take);
+    }
     _cgiBodyOffset += chunk;
     return chunk;
 }
@@ -642,6 +673,13 @@ void Client::handleCgiInput() {
         updateLastActivity();
         _cgiWriteBuffer.erase(0, bytesWritten);
         _cgiBytesSent += bytesWritten;
+        // Jeśli przesłaliśmy znaczącą część z początku body, zwolnij ją z pamięci
+        if (_cgiBytesSent > 256 * 1024 && _cgiBytesSent % (256 * 1024) < (size_t)bytesWritten) {
+            size_t toDiscard = _cgiBytesSent - _cgiBodyOffset;
+            if (toDiscard > 0) {
+                _request.discardBodyPrefix(toDiscard);
+            }
+        }
         _stageBodyChunkForCgi(CGI_WRITE_BUFFER_LIMIT);
     } else if (bytesWritten == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
         updateLastActivity();
@@ -698,7 +736,8 @@ void Client::handleCgiOutput() {
             if (_keepAlive) _response.setHeader("Keep-Alive", "timeout=600, max=100");
 
             // If CGI provided Content-Length, we can start streaming immediately
-            std::string cl = _response.getHeader("content-length");
+            // Use case-insensitive lookup to honor any capitalization from CGI
+            std::string cl = _response.getHeaderCI("Content-Length");
             std::string firstBody = _cgiOutputBuffer.substr(header_end_pos + sep_len);
 
             // Strip a pending 100-Continue before sending final headers

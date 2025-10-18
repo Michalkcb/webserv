@@ -133,7 +133,10 @@ bool CGI::execute(const Request& request, const std::string& scriptPath) {
     _setupEnvironment(request);
 
     if (isMappedBla) {
-        _env["SCRIPT_FILENAME"] = _cgiPath;
+        // Dla mapowania .bla tester oczekuje, że SCRIPT_FILENAME i PATH_TRANSLATED
+        // wskazują na program handlera (cgi_test), a ścieżka pliku .bla zostanie
+        // przekazana jako argv[1]. Nazwy skryptu i PATH_INFO pozostają zgodne z żądaniem.
+        _env["SCRIPT_FILENAME"] = _cgiPath;   // np. ./cgi_test
         _env["PATH_TRANSLATED"] = _cgiPath;
         _env["SCRIPT_NAME"]     = request.getPath();
         _env["PATH_INFO"]       = request.getPath();
@@ -177,6 +180,8 @@ bool CGI::execute(const Request& request, const std::string& scriptPath) {
         std::vector<char*> argv;
         if (isMappedBla) {
             argv.push_back(const_cast<char*>(handlerAbs.c_str()));
+            // Pass the target script path as first argument to the handler
+            argv.push_back(const_cast<char*>(scriptPath.c_str()));
         } else {
             std::string interp = getCgiInterpreter(scriptPath);
             if (!interp.empty()) {

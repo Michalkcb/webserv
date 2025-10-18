@@ -88,6 +88,32 @@ bool Response::hasHeader(const std::string& name) const {
     return _headers.find(name) != _headers.end();
 }
 
+// Case-insensitive getter helpers. This preserves existing header storage
+// (case-sensitive keys), while allowing robust lookups for names like
+// "Content-Length" vs "content-length" coming from external modules.
+std::string Response::getHeaderCI(const std::string& name) const {
+    if (name.empty()) return "";
+    // Fast path: exact match
+    Headers::const_iterator it = _headers.find(name);
+    if (it != _headers.end()) return it->second;
+    // Fallback: linear scan with lower-cased compare (header set sizes are small)
+    std::string target = Utils::toLowerCase(name);
+    for (Headers::const_iterator jt = _headers.begin(); jt != _headers.end(); ++jt) {
+        if (Utils::toLowerCase(jt->first) == target) return jt->second;
+    }
+    return "";
+}
+
+bool Response::hasHeaderCI(const std::string& name) const {
+    if (name.empty()) return false;
+    if (_headers.find(name) != _headers.end()) return true;
+    std::string target = Utils::toLowerCase(name);
+    for (Headers::const_iterator jt = _headers.begin(); jt != _headers.end(); ++jt) {
+        if (Utils::toLowerCase(jt->first) == target) return true;
+    }
+    return false;
+}
+
 // In src/Response.cpp
 
 // ==========================================================

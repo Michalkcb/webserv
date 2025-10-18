@@ -35,7 +35,12 @@ Request::~Request() {
 }
 
 Request::ParseState Request::parse(const std::string& data) {
-    _rawRequest += data;
+    // Ogranicz rozmiar bufora surowego żądania (np. 64KB), żeby nie pożerać pamięci
+    const size_t RAW_CAP = 64 * 1024;
+    if (_rawRequest.size() < RAW_CAP) {
+        size_t can = RAW_CAP - _rawRequest.size();
+        _rawRequest.append(data.c_str(), std::min(can, data.size()));
+    }
     std::string buffer = _remainingData + data;
     _remainingData.clear();
     
@@ -148,6 +153,17 @@ Request::ParseState Request::parse(const std::string& data) {
     }
     
     return _state;
+}
+
+void Request::discardBodyPrefix(size_t n) {
+    if (n == 0) return;
+    if (n >= _body.size()) {
+        _body.clear();
+        _bodyReceived = 0; // reset liczników do aktualnej długości body
+        return;
+    }
+    _body.erase(0, n);
+    if (_bodyReceived >= n) _bodyReceived -= n; else _bodyReceived = 0;
 }
 
 void Request::_parseRequestLine(const std::string& line) {

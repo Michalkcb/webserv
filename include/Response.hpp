@@ -39,6 +39,9 @@ public:
     const std::string& getBody() const;
     std::string getHeader(const std::string& name) const;
     bool hasHeader(const std::string& name) const;
+    // Case-insensitive header access (for CGI header handling etc.)
+    std::string getHeaderCI(const std::string& name) const;
+    bool hasHeaderCI(const std::string& name) const;
     bool isComplete() const;
     size_t getBytesSent() const;
     size_t getContentLength() const;
