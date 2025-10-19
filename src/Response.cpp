@@ -224,8 +224,25 @@ Response Response::createFileResponse(const std::string& filename, const std::st
     }
     
     std::string content = Utils::readFile(filename);
+    
+    // If content is empty, check if it's a valid 0-byte file or a read error.
     if (content.empty()) {
-        Logger::error("Failed to read file: " + filename);
+        struct stat fileStat;
+        if (stat(filename.c_str(), &fileStat) == 0) {
+            if (fileStat.st_size == 0) {
+                // This is a valid 0-byte file. Return 200 OK.
+                std::string contentType = mimeType;
+                if (contentType.empty()) {
+                    contentType = Utils::getMimeType(Utils::getFileExtension(filename));
+                }
+                response.setHeader("Content-Type", contentType);
+                response.setBody(""); // This will set Content-Length: 0
+                response.setComplete(true);
+                return response;
+            }
+        }
+        // If stat fails or size is > 0, it was a read error.
+        Logger::error("Failed to read file or file is empty but size > 0: " + filename);
         return createErrorResponse(HTTP_INTERNAL_SERVER_ERROR);
     }
     
