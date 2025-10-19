@@ -925,6 +925,7 @@ void Client::finalizeCgiResponse() {
                 Logger::error(std::string("finalizeCgiResponse: error draining CGI stdout: ") + strerror(errno));
                 break;
             }
+            
         }
     }
     // Always strip any pending interim 100-Continue responses that may have been
