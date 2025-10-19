@@ -552,9 +552,13 @@ Response Client::_handlePostRequest(const Config::ServerBlock& serverConfig, con
         return r;
     }
 
-    // Handle CGI requests first
+    // Handle CGI-mapped POST fallback: if target script/file doesn't exist, return 404
     if (location && location->isCgiRequest(_request.getUri())) {
-        // This should have been handled earlier in the CGI section
+        std::string resolved = location->getFullPath(path);
+        if (!Utils::fileExists(resolved)) {
+            return Response::createErrorResponse(HTTP_NOT_FOUND);
+        }
+        // Otherwise, this path should have spawned CGI earlier; keep existing fallback behavior
         return Response::createErrorResponse(HTTP_INTERNAL_SERVER_ERROR);
     }
     
