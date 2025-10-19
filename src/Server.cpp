@@ -167,13 +167,13 @@ void Server::_handlePollEvents() {
 
             // Event on the client's main socket
                     if (current_fd == clientFd) {
-                // Handle HUP/ERR carefully: if we still have data to send, try to flush it.
+                // Handle HUP/ERR carefully: do not write unless POLLOUT is also signaled
                         if (revents & (POLLHUP | POLLERR)) {
                     // Mark peer as closed to stop expecting more reads
                     client->markPeerClosed();
                     Logger::debug("Poll revents on client fd=" + Utils::intToString(clientFd) + ": HUP/ERR. sendBufferLen=" + Utils::intToString((int)client->getSendBuffer().length()));
-                    // Still attempt to send any remaining data
-                            if (!client->getSendBuffer().empty()) {
+                            // Only attempt to send remaining data if POLLOUT is also set
+                            if ((revents & POLLOUT) && !client->getSendBuffer().empty()) {
                                 client->sendData();
                             }
                     // If nothing to send, finish the client
