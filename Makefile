@@ -56,7 +56,7 @@ OBJS		= $(addprefix $(OBJDIR)/, $(SOURCES:.cpp=.o))
 all: $(NAME)
 
 $(NAME): $(OBJS)
-	$(CXX) $(CXXFLAGS) $(OBJS) -o $(NAME) -lz
+	$(CXX) $(CXXFLAGS) $(OBJS) -o $(NAME)
 
 $(OBJDIR)/%.o: $(SRCDIR)/%.cpp $(INCS) | $(OBJDIR)
 	$(CXX) $(CXXFLAGS) -I$(INCDIR) -c $< -o $@

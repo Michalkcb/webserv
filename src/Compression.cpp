@@ -18,15 +18,10 @@ Compression::CompressionType Compression::getAcceptedCompression(const std::stri
 }
 
 std::string Compression::compress(const std::string& data, CompressionType type) {
-    switch (type) {
-        case GZIP:
-            return _simpleGzipCompress(data);
-        case DEFLATE:
-            return simpleCompress(data);
-        case NONE:
-        default:
-            return data;
-    }
+    // External compression libraries are forbidden by subject.
+    // Return original data to disable real compression in mandatory part.
+    (void)type;
+    return data;
 }
 
 bool Compression::shouldCompress(const std::string& contentType, size_t contentLength) {
@@ -62,43 +57,7 @@ bool Compression::_isCompressible(const std::string& contentType) {
             contentType.find("application/xhtml") == 0);
 }
 
-std::string Compression::_simpleGzipCompress(const std::string& data) {
-    z_stream zs;                        
-    memset(&zs, 0, sizeof(zs));
-
-    if (deflateInit2(&zs, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 15 + 16, 8, Z_DEFAULT_STRATEGY) != Z_OK) {
-        Logger::debug("Failed to initialize gzip compression");
-        return data;
-    }
-
-    zs.next_in = (Bytef*)data.data();
-    zs.avail_in = data.size();
-
-    int ret;
-    char outbuffer[32768];
-    std::string compressed;
-
-    do {
-        zs.next_out = reinterpret_cast<Bytef*>(outbuffer);
-        zs.avail_out = sizeof(outbuffer);
-
-        ret = deflate(&zs, Z_FINISH);
-
-        if (compressed.size() < zs.total_out) {
-            compressed.append(outbuffer, zs.total_out - compressed.size());
-        }
-    } while (ret == Z_OK);
-
-    deflateEnd(&zs);
-
-    if (ret != Z_STREAM_END) {
-        Logger::debug("Failed to compress data with gzip");
-        return data;
-    }
-
-    Logger::debug("Real GZIP compression applied: " + Utils::intToString(data.length()) + " -> " + Utils::intToString(compressed.length()) + " bytes");
-    return compressed;
-}
+// Removed real gzip implementation to comply with subject (no external libs)
 
 std::string Compression::simpleCompress(const std::string& data) {
     // Simple run-length encoding for demonstration

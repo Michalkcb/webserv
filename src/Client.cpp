@@ -925,7 +925,7 @@ void Client::finalizeCgiResponse() {
                 Logger::error(std::string("finalizeCgiResponse: error draining CGI stdout: ") + strerror(errno));
                 break;
             }
-            
+
         }
     }
     // Always strip any pending interim 100-Continue responses that may have been
@@ -1312,44 +1312,10 @@ void Client::_applySessionManagement() {
 }
 
 void Client::_applyCompression() {
-    // Only consider compression for GET/HEAD to avoid altering CGI/POST bodies
-    if (_request.getMethod() != "GET" && _request.getMethod() != "HEAD") {
-        Logger::debug("Skipping compression for non-GET/HEAD method");
-        return;
-    }
-
-    std::string acceptEncoding = _request.getHeader("accept-encoding");
-    Logger::debug("Accept-Encoding header: '" + acceptEncoding + "'");
-    if (acceptEncoding.empty()) {
-        Logger::debug("No Accept-Encoding header - skipping compression");
-        return;
-    }
-    
-    std::string contentType = _response.getHeader("content-type");
-    std::string content = _response.getBody();
-
-    // Avoid compressing already-encoded responses
-    if (!_response.getHeader("content-encoding").empty()) {
-        Logger::debug("Response already encoded - skipping compression");
-        return;
-    }
-
-    if (content.length() > 100 &&
-        (contentType.find("text/") == 0 || 
-         contentType.find("application/") == 0 ||
-         contentType.empty())) {
-
-        Compression::CompressionType type = Compression::getAcceptedCompression(acceptEncoding);
-        if (type != Compression::NONE) {
-            std::string compressed = Compression::compress(content, type);
-            if (!compressed.empty()) {
-                _response.setBody(compressed);
-                _response.setHeader("Content-Encoding", Compression::getEncodingHeader(type));
-                _response.setHeader("Content-Length", Utils::intToString((int)compressed.length()));
-                Logger::debug("Applied compression: " + Compression::getEncodingHeader(type));
-            }
-        }
-    }
+    // Compression (gzip/deflate) wyłączona w mandatory części projektu
+    // zgodnie z zasadą: brak zewnętrznych bibliotek. Nie modyfikujemy body
+    // ani nagłówków Content-Encoding.
+    (void)0; // no-op
 }
 
 void Client::_applyRangeRequests() {

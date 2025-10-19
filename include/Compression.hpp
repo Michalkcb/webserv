@@ -2,7 +2,6 @@
 #define COMPRESSION_HPP
 
 #include "webserv.hpp"
-#include <zlib.h>
 
 class Compression {
 public:
@@ -14,7 +13,6 @@ public:
 
 private:
     static bool _isCompressible(const std::string& contentType);
-    static std::string _simpleGzipCompress(const std::string& data);
 
 public:
     // Check if client accepts compression
