@@ -898,40 +898,9 @@ void Client::finalizeCgiResponse() {
         _state = SENDING_RESPONSE;
         return;
     }
-
-
-    // Before we construct the final response, aggressively drain any remaining
-    // bytes from the CGI stdout pipe. When the CGI process exits, there can
-    // still be unread bytes sitting in the pipe buffer. If we finalize too
-    // early, we'd truncate the response body by whatever remains unread.
-    // Read until EOF (read returns 0). The pipe is non-blocking, but once the
-    // writer has closed and we've consumed all bytes, read() will return 0.
-    if (_cgi && _cgi->getOutputFd() != -1) {
-        char drainBuf[BUFFER_SIZE];
-        for (;;) {
-            ssize_t r = _cgi->readFromOutput(drainBuf, sizeof(drainBuf));
-            if (r > 0) {
-                _cgiOutputBuffer.append(drainBuf, r);
-                continue; // try to read more
-            }
-            if (r == 0) {
-                Logger::debug("finalizeCgiResponse: fully drained CGI stdout before building response");
-                break; // EOF
-            }
-            // r < 0
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                // Do not perform any local poll() here; rely solely on the main
-                // server event loop to notify us when more data is available.
-                // Proceed with buffered output without blocking.
-                Logger::debug("finalizeCgiResponse: CGI stdout temporarily EAGAIN; proceeding with buffered output (no local poll)");
-                break;
-            } else {
-                Logger::error(std::string("finalizeCgiResponse: error draining CGI stdout: ") + strerror(errno));
-                break;
-            }
-
-        }
-    }
+    // Subject compliance: do not perform read() here. All CGI stdout
+    // consumption must be driven by poll() readiness (handled in
+    // handleCgiOutput()).
     // Always strip any pending interim 100-Continue responses that may have been
     // queued earlier but not yet sent, to avoid confusing the finalization logic
     // and clients (which could otherwise see 100 followed by raw body bytes).
