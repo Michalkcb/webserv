@@ -177,6 +177,22 @@ bool CGI::execute(const Request& request, const std::string& scriptPath) {
         int devnull = open("/dev/null", O_WRONLY);
         if (devnull != -1) { dup2(devnull, STDERR_FILENO); close(devnull); }
 
+        // Set correct working directory for CGI (subject requirement):
+        // - for mapped .bla: use directory of handler (handlerAbs)
+        // - otherwise: use directory of scriptPath
+        {
+            std::string work = (isMappedBla ? handlerAbs : scriptPath);
+            // extract dirname: everything before last '/'
+            std::string::size_type slash = work.rfind('/');
+            std::string workDir = (slash == std::string::npos) ? std::string(".") : work.substr(0, slash);
+            if (!workDir.empty()) {
+                if (chdir(workDir.c_str()) == -1) {
+                    // Cannot chdir to intended working directory; exit child
+                    _exit(126);
+                }
+            }
+        }
+
         std::vector<char*> argv;
         if (isMappedBla) {
             argv.push_back(const_cast<char*>(handlerAbs.c_str()));
