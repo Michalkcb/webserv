@@ -204,8 +204,12 @@ void Server::_handlePollEvents() {
                 if (current_fd == client->getCgi()->getInputFd() && (revents & POLLOUT)) {
                     client->handleCgiInput();
                 }
-                if (current_fd == client->getCgi()->getOutputFd() && (revents & POLLIN)) {
-                    client->handleCgiOutput();
+                if (current_fd == client->getCgi()->getOutputFd()) {
+                    // Czytaj dane/EOF z CGI stdout zarówno przy POLLIN jak i przy POLLHUP/ERR.
+                    // To pozwala wykryć EOF (read==0) gdy jądro sygnalizuje jedynie HUP.
+                    if (revents & (POLLIN | POLLHUP | POLLERR)) {
+                        client->handleCgiOutput();
+                    }
                 }
             }
         }
@@ -500,26 +504,36 @@ void Server::_checkCgiCompletion() {
             //   (to avoid racing with ongoing uploads).
             if (cgiFinished || (cgiTimedOut && clientIdle)) {
                 Logger::debug("CGI completion or timeout detected for client " + Utils::intToString(it->first));
-                // Read any remaining bytes from CGI
-                client->handleCgiOutput();
 
-                // IMPORTANT: If CGI finished but the client request is not complete yet,
-                // defer finalization until the upload completes to avoid closing the
-                // connection while the client is still writing (broken pipe).
+                // Nie wykonujemy żadnego read() tutaj: odczyt CGI stdout wyłącznie po POLLIN
+                // (obsługiwany w _handlePollEvents -> Client::handleCgiOutput()).
+
+                // Jeśli CGI zakończył się, ale klient wciąż uploaduje request body,
+                // odłóż finalizację aby nie przerwać strumienia po stronie klienta.
                 if (cgiFinished && !client->getRequest().isComplete()) {
                     Logger::debug("Deferring CGI finalization: client still uploading request body.");
                     continue;
                 }
 
-                // Finalize the response now. However, handleCgiOutput() may
-                // already have finalized and cleaned up the CGI (clearing the
-                // client's CGI pointer). Re-check the client's CGI pointer and
-                // state to avoid calling finalizeCgiResponse() twice.
-                if (client->getState() != Client::FINISHED && client->getState() != Client::ERROR_STATE) {
-                    if (client->getCgi() == NULL) {
-                        Logger::debug("Server::_checkCgiCompletion: CGI already finalized by handleCgiOutput(), skipping finalizeCgiResponse\n");
-                    } else {
-                        client->finalizeCgiResponse();
+                bool canFinalizeNow = false;
+                if (cgiTimedOut && clientIdle) {
+                    // Timeout: możemy finalizować natychmiast bez dalszych odczytów
+                    canFinalizeNow = true;
+                } else if (cgiFinished) {
+                    // Finalizacja po normalnym zakończeniu tylko gdy stdout CGI został już zamknięty (EOF przetworzony)
+                    if (client->getCgi() && client->getCgi()->getOutputFd() == -1) {
+                        canFinalizeNow = true;
+                    }
+                }
+
+                if (canFinalizeNow) {
+                    // Uwaga: finalizeCgiResponse może już być wykonane w ścieżce POLLIN.
+                    if (client->getState() != Client::FINISHED && client->getState() != Client::ERROR_STATE) {
+                        if (client->getCgi() == NULL) {
+                            Logger::debug("Server::_checkCgiCompletion: CGI already finalized elsewhere, skipping finalizeCgiResponse\n");
+                        } else {
+                            client->finalizeCgiResponse();
+                        }
                     }
                 }
             }

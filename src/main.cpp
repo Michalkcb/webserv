@@ -22,8 +22,20 @@ int main(int argc, char* argv[]) {
         configFile = argv[1];
     }
     
-    // Set logging level
-    Logger::setLevel(Logger::DEBUG);
+    // Ustaw poziom logowania: domyślnie INFO, z możliwością nadpisania
+    // przez zmienną środowiskową WEBSERV_LOG_LEVEL (DEBUG|INFO|WARN|ERROR).
+    {
+        const char* lv = getenv("WEBSERV_LOG_LEVEL");
+        if (lv) {
+            if (strcmp(lv, "DEBUG") == 0)      Logger::setLevel(Logger::DEBUG);
+            else if (strcmp(lv, "INFO") == 0)  Logger::setLevel(Logger::INFO);
+            else if (strcmp(lv, "WARN") == 0)  Logger::setLevel(Logger::WARN);
+            else if (strcmp(lv, "ERROR") == 0) Logger::setLevel(Logger::ERROR);
+            else                                 Logger::setLevel(Logger::INFO);
+        } else {
+            Logger::setLevel(Logger::INFO);
+        }
+    }
     
     try {
         Logger::info("=== Webserv HTTP Server ===");

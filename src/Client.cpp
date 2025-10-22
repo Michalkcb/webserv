@@ -365,7 +365,8 @@ void Client::processRequest(const class Config& config) {
 
             _state = CGI_PROCESSING;
             updateLastActivity();
-            handleCgiInput(); // must write whole body then close CGI stdin
+            // Pierwsze write() do stdin CGI wykona się wyłącznie po POLLOUT
+            // (Server::_handlePollEvents -> Client::handleCgiInput()).
             return;
         }
     }
