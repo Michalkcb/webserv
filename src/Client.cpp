@@ -163,10 +163,6 @@ ssize_t Client::receiveData() {
     } else if (bytesRead == 0) {
         // Peer closed the connection
         _peerClosed = true;
-    } else {
-        if (errno == EAGAIN || errno == EWOULDBLOCK) {
-            return -1; // non-blocking, no data
-        }
     }
     return bytesRead;
 }
@@ -205,11 +201,7 @@ ssize_t Client::sendData() {
         return bytesSent;
     }
 
-    if (bytesSent < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-        return -1; // try again later
-    }
-    // Fatal send error
-    _state = ERROR_STATE;
+    // Do not adjust behaviour based on errno; simply signal no progress.
     return -1;
 }
 
@@ -678,13 +670,9 @@ void Client::handleCgiInput() {
         _cgiWriteBuffer.erase(0, bytesWritten);
         _cgiBytesSent += bytesWritten;
         _stageBodyChunkForCgi(CGI_WRITE_BUFFER_LIMIT);
-    } else if (bytesWritten == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-        updateLastActivity();
-        return;
     } else if (bytesWritten == -1) {
-        Logger::error("Error writing to CGI stdin; closing pipe");
-        _cgi->closeInput();
-        _cgiWriteBuffer.clear();
+        // Non-progress on write; rely on POLLOUT to retry later.
+        updateLastActivity();
         return;
     }
 
@@ -823,10 +811,7 @@ void Client::handleCgiOutput() {
         return;
     }
 
-    if (errno != EAGAIN && errno != EWOULDBLOCK) {
-        Logger::error("Error reading from CGI during output handling");
-        _state = ERROR_STATE;
-    }
+    // Do not adjust behaviour based on errno after read; wait for next POLLIN/HUP/ERR.
 }
 
 void Client::finalizeCgiResponse() {

@@ -314,8 +314,8 @@ ssize_t CGI::writeToInput(const char* data, size_t len) {
             if (total == len) break;          // all bytes written
             continue;                         // try to push more immediately
         }
-        if (n == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-            // pipe full; caller should retry later with the remaining slice
+        if (n == -1) {
+            // Do not branch on errno here; caller will retry on future POLLOUT
             break;
         }
         if (n == 0) {
@@ -330,10 +330,6 @@ ssize_t CGI::writeToInput(const char* data, size_t len) {
     if (total > 0) {
         Logger::debug("CGI::writeToInput() wrote " + Utils::intToString((int)total) + " bytes");
         return (ssize_t)total;
-    }
-    if (errno == EAGAIN || errno == EWOULDBLOCK) {
-        Logger::debug("CGI::writeToInput() would block (EAGAIN)");
-        return -1;
     }
     return -1;
 }

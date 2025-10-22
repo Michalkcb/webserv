@@ -369,9 +369,8 @@ void Server::_handleClientRead(int clientFd) {
     Client* client = it->second;
     ssize_t bytesRead = client->receiveData();
     
-    // Close connection if client disconnected or there's a real error
+    // Close connection if client disconnected or client reached terminal state
     if ((bytesRead == 0) ||
-        (bytesRead < 0 && errno != EAGAIN && errno != EWOULDBLOCK) ||
         client->getState() == Client::FINISHED || 
         client->getState() == Client::ERROR_STATE) {
         _closeClient(clientFd);
