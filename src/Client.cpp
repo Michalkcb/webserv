@@ -903,13 +903,7 @@ void Client::finalizeCgiResponse() {
         _cgi->terminate();
         _response = Response::createErrorResponse(HTTP_REQUEST_TIMEOUT);
     } else {
-        // Write raw CGI buffer to disk for diagnostics
-        Logger::debug("Creating /tmp/cgi_raw_input_before_parse.bin(CPP707)");
-        FILE* dbg = fopen("/tmp/cgi_raw_input_before_parse.bin", "wb");
-        if (dbg) {
-            fwrite(_cgiOutputBuffer.data(), 1, _cgiOutputBuffer.size(), dbg);
-            fclose(dbg);
-        }
+        // Drop binary dump to /tmp to comply with allowed API set
 
         Logger::debug("Finalizing CGI with buffer length (CPP714): " + Utils::intToString((int)_cgiOutputBuffer.length()));
 
@@ -1034,25 +1028,7 @@ void Client::finalizeCgiResponse() {
                         Response r = _cgi->parseHeaders(headersStr);
                         // Overwrite/ensure Content-Length is accurate
                         r.setHeader("Content-Length", Utils::intToString((int)body.size()));
-                        // Diagnostics: if this is the ubuntu_tester CGI path, dump header/body size
-                        {
-                            std::string reqPath = _request.getPath();
-                            if (reqPath.find("/directory/youpi.bla") != std::string::npos) {
-                                FILE* fd = fopen("/tmp/ws_last_cgi_info.txt", "w");
-                                if (fd) {
-                                    fprintf(fd, "URI: %s\n", reqPath.c_str());
-                                    fprintf(fd, "Headers (from CGI):\n%.*s\n", (int)headersStr.size(), headersStr.c_str());
-                                    fprintf(fd, "Computed Body Size: %d\n", (int)body.size());
-                                    std::string cl_str = r.getHeader("Content-Length");
-                                    const char* cl = cl_str.c_str();
-                                    fprintf(fd, "Response Content-Length: %s\n", cl && *cl ? cl : "(none)");
-                                    // Also dump the final serialized headers we will send
-                                    std::string hdrsOnly = r.toString(false);
-                                    fprintf(fd, "Final Headers To Send:\n%.*s\n", (int)hdrsOnly.size(), hdrsOnly.c_str());
-                                    fclose(fd);
-                                }
-                            }
-                        }
+                        // Drop textual dump to /tmp
                         // Apply keep-alive
                         {
                             bool isHttp11 = (_request.getVersion() == "HTTP/1.1");
@@ -1097,37 +1073,7 @@ void Client::finalizeCgiResponse() {
         _sendBuffer = _response.toString();
     }
 
-    FILE* ff = fopen("/tmp/final_send_buffer.bin", "wb");
-    if (ff) {
-        fwrite(_sendBuffer.data(), 1, _sendBuffer.size(), ff);
-        fclose(ff);
-    }
-    FILE* fi = fopen("/tmp/cgi_raw_stdin_before_write.bin", "wb");
-    if (fi) {
-        fwrite(_cgiInputCopy.data(), 1, _cgiInputCopy.size(), fi);
-        fclose(fi);
-    }
-    // Dump full CGI stdout+stderr when finalizing
-    {
-        static int raw_seq2 = 0;
-        char outpath2[256];
-        snprintf(outpath2, sizeof(outpath2), "/tmp/cgi_stdout_stderr_%d_%d.txt", _fd, ++raw_seq2);
-        Logger::debug(std::string("Attempting to write final CGI stdout/stderr dump to: ") + outpath2);
-        FILE* fout2 = fopen(outpath2, "w");
-        if (fout2) {
-            size_t wrote1 = fprintf(fout2, "==== CGI stdout+stderr dump (client fd=%d) ===\n", _fd);
-            size_t wrote2 = 0;
-            if (!_cgiOutputBuffer.empty()) {
-                wrote2 = fwrite(_cgiOutputBuffer.data(), 1, _cgiOutputBuffer.size(), fout2);
-            }
-            size_t wrote3 = fprintf(fout2, "\n==== end dump ===\n");
-            fclose(fout2);
-            Logger::debug(std::string("Wrote final CGI dump to: ") + outpath2 + ", header_bytes=" + Utils::intToString((int)wrote1) + ", body_bytes=" + Utils::intToString((int)wrote2) + ", trailer_bytes=" + Utils::intToString((int)wrote3));
-        } else {
-            int serr = errno;
-            Logger::error(std::string("Could not write final CGI stdout/stderr dump to ") + outpath2 + ": " + strerror(serr) + " (errno=" + Utils::intToString(serr) + ")");
-        }
-    }
+    // Drop all file-based diagnostics in finalize to comply with allowed API set
     _cgiOutputBuffer.clear();
     _state = SENDING_RESPONSE;
 }

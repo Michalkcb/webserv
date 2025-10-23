@@ -3,6 +3,7 @@
 #include "Logger.hpp"
 #include <fcntl.h>
 #include <netinet/tcp.h>
+#include <netdb.h>
 
 Server* Server::instance = NULL;
 
@@ -253,57 +254,46 @@ void Server::_setupServerSockets() {
 }
 
 int Server::_createServerSocket(const std::string& host, int port) {
-    int serverSocket = socket(AF_INET, SOCK_STREAM, 0);
-    if (serverSocket < 0) {
-        throw std::runtime_error("Failed to create socket");
+    struct addrinfo hints; memset(&hints, 0, sizeof(hints));
+    hints.ai_family   = AF_INET;      // IPv4
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP;
+    bool anyHost = (host.empty() || host == "0.0.0.0");
+    if (anyHost) hints.ai_flags = AI_PASSIVE;
+
+    std::string portStr = Utils::intToString(port);
+    struct addrinfo* res = NULL;
+    int gaie = getaddrinfo(anyHost ? NULL : host.c_str(), portStr.c_str(), &hints, &res);
+    if (gaie != 0 || !res) {
+        throw std::runtime_error(std::string("getaddrinfo failed for host '") + (anyHost ? "*" : host) + "': " + gai_strerror(gaie));
     }
-    
-    // Set socket options
-    int opt = 1;
-    if (setsockopt(serverSocket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
-        close(serverSocket);
-        throw std::runtime_error("Failed to set SO_REUSEADDR");
-    }
-    
-    // Optimize socket buffers for better performance
-    int rcvbuf = 262144;  // 256KB receive buffer
-    int sndbuf = 262144;  // 256KB send buffer
-    if (setsockopt(serverSocket, SOL_SOCKET, SO_RCVBUF, &rcvbuf, sizeof(rcvbuf)) < 0) {
-        Logger::warn("Failed to set SO_RCVBUF");
-    }
-    if (setsockopt(serverSocket, SOL_SOCKET, SO_SNDBUF, &sndbuf, sizeof(sndbuf)) < 0) {
-        Logger::warn("Failed to set SO_SNDBUF");
-    }
-    
-    // Set non-blocking
-    Utils::setNonBlocking(serverSocket);
-    
-    // Bind socket
-    struct sockaddr_in serverAddr;
-    memset(&serverAddr, 0, sizeof(serverAddr));
-    serverAddr.sin_family = AF_INET;
-    serverAddr.sin_port = htons(port);
-    
-    if (host == "0.0.0.0" || host.empty()) {
-        serverAddr.sin_addr.s_addr = INADDR_ANY;
-    } else {
-        if (inet_pton(AF_INET, host.c_str(), &serverAddr.sin_addr) <= 0) {
-            close(serverSocket);
-            throw std::runtime_error("Invalid host address: " + host);
+
+    int serverSocket = -1;
+    for (struct addrinfo* ai = res; ai; ai = ai->ai_next) {
+        serverSocket = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
+        if (serverSocket < 0) continue;
+
+        int opt = 1;
+        setsockopt(serverSocket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+        int rcvbuf = 262144, sndbuf = 262144;
+        setsockopt(serverSocket, SOL_SOCKET, SO_RCVBUF, &rcvbuf, sizeof(rcvbuf));
+        setsockopt(serverSocket, SOL_SOCKET, SO_SNDBUF, &sndbuf, sizeof(sndbuf));
+
+        Utils::setNonBlocking(serverSocket);
+
+        if (bind(serverSocket, ai->ai_addr, ai->ai_addrlen) == 0) {
+            if (listen(serverSocket, SOMAXCONN) == 0) {
+                break; // success
+            }
         }
-    }
-    
-    if (bind(serverSocket, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) < 0) {
         close(serverSocket);
-        throw std::runtime_error("Failed to bind socket to " + host + ":" + Utils::intToString(port));
+        serverSocket = -1;
     }
-    
-    // Listen
-    if (listen(serverSocket, SOMAXCONN) < 0) {
-        close(serverSocket);
-        throw std::runtime_error("Failed to listen on socket");
+    freeaddrinfo(res);
+
+    if (serverSocket < 0) {
+        throw std::runtime_error("Failed to create/bind/listen server socket");
     }
-    
     return serverSocket;
 }
 
@@ -325,10 +315,8 @@ void Server::_acceptNewConnection(int serverSocket) {
         return;
     }
     
-    char clientIP[INET_ADDRSTRLEN];
-    inet_ntop(AF_INET, &clientAddr.sin_addr, clientIP, INET_ADDRSTRLEN);
-    
-    Logger::info("New connection from " + std::string(clientIP) + " (fd: " + Utils::intToString(clientSocket) + ")");
+    // Avoid inet_ntop (not in allowed list). Log only fd.
+    Logger::info("New connection accepted (fd: " + Utils::intToString(clientSocket) + ")");
     
     // Set client socket to non-blocking
     Utils::setNonBlocking(clientSocket);
@@ -349,17 +337,7 @@ void Server::_acceptNewConnection(int serverSocket) {
         Logger::debug("Failed to set TCP_NODELAY");
     }
 
-    // Try to read the kernel-level fd target (/proc/self/fd/<fd>) to capture socket inode like "socket:[12345]"
-    char fdPath[64];
-    char linkTarget[256];
-    snprintf(fdPath, sizeof(fdPath), "/proc/self/fd/%d", clientSocket);
-    ssize_t linkLen = readlink(fdPath, linkTarget, sizeof(linkTarget) - 1);
-    if (linkLen != -1) {
-        linkTarget[linkLen] = '\0';
-        Logger::debug(std::string("Accepted fd link: ") + fdPath + " -> " + linkTarget);
-    } else {
-        Logger::debug(std::string("Accepted fd link: ") + fdPath + " -> (readlink failed: " + std::string(strerror(errno)) + ")");
-    }
+    // Drop readlink-based diagnostics to stay within allowed functions
     
     // Allocate Client on the heap to ensure single owner semantics
     Client* newClient = new Client(clientSocket);

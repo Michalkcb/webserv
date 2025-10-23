@@ -144,13 +144,9 @@ bool CGI::execute(const Request& request, const std::string& scriptPath) {
 
     char** envArray = _createEnvArray();
 
-    std::string handlerAbs = _cgiPath;
-    if (!_cgiPath.empty() && _cgiPath[0] != '/') {
-        char cwdBuf[512];
-        if (getcwd(cwdBuf, sizeof(cwdBuf) - 1))
-            handlerAbs = std::string(cwdBuf) + "/" + _cgiPath;
-    }
-    if (isMappedBla && !handlerAbs.empty() && !Utils::fileExists(handlerAbs)) {
+    // For mapped .bla, we'll chdir into handler directory and exec basename
+    std::string handlerPath = _cgiPath;
+    if (isMappedBla && !handlerPath.empty() && !Utils::fileExists(handlerPath)) {
         Logger::error("CGI handler not found: " + handlerAbs);
         close(inPipe[0]); close(inPipe[1]);
         close(outPipe[0]); close(outPipe[1]);
@@ -170,7 +166,7 @@ bool CGI::execute(const Request& request, const std::string& scriptPath) {
     }
 
     if (_pid == 0) {
-        setpgid(0,0);
+    // Do not call setpgid; not required by subject
         close(inPipe[1]); close(outPipe[0]);
         dup2(inPipe[0],  STDIN_FILENO);
         dup2(outPipe[1], STDOUT_FILENO);
@@ -181,7 +177,7 @@ bool CGI::execute(const Request& request, const std::string& scriptPath) {
         // - for mapped .bla: use directory of handler (handlerAbs)
         // - otherwise: use directory of scriptPath
         {
-            std::string work = (isMappedBla ? handlerAbs : scriptPath);
+            std::string work = (isMappedBla ? handlerPath : scriptPath);
             // extract dirname: everything before last '/'
             std::string::size_type slash = work.rfind('/');
             std::string workDir = (slash == std::string::npos) ? std::string(".") : work.substr(0, slash);
@@ -195,7 +191,10 @@ bool CGI::execute(const Request& request, const std::string& scriptPath) {
 
         std::vector<char*> argv;
         if (isMappedBla) {
-            argv.push_back(const_cast<char*>(handlerAbs.c_str()));
+            // exec basename of handler within its directory
+            std::string::size_type slash = handlerPath.rfind('/');
+            std::string handlerBase = (slash == std::string::npos) ? handlerPath : handlerPath.substr(slash + 1);
+            argv.push_back(const_cast<char*>(handlerBase.c_str()));
             // Pass the target script path as first argument to the handler
             argv.push_back(const_cast<char*>(scriptPath.c_str()));
         } else {
@@ -357,7 +356,8 @@ void CGI::terminate() {
         // Try to kill the entire process group first (negative PID)
         // This ensures that any child processes spawned by the CGI are also terminated
         kill(-_pid, SIGTERM);
-        usleep(100000); // 100ms grace period
+    // Replace usleep with poll timeout (allowed API)
+    poll(NULL, 0, 100);
         kill(-_pid, SIGKILL);
         
         // Also kill the specific process if it's still running
@@ -371,57 +371,8 @@ void CGI::terminate() {
 void CGI::closeInput() {
     if (_inputFd != -1) {
     Logger::debug(std::string("DIAG_CGI_closeInput: before close(fd=") + Utils::intToString(_inputFd) + ")");
-    // Pre-close snapshot in CGI::closeInput
-    {
-        static int cgi_pre_snap = 0;
-        char pre_path[256];
-        snprintf(pre_path, sizeof(pre_path), "/tmp/ws_fds_cgi_close_pre_%d.txt", ++cgi_pre_snap);
-        FILE* fpre = fopen(pre_path, "w");
-        if (fpre) {
-            fprintf(fpre, "CGI pre-close snapshot: inputFd=%d\n", _inputFd);
-            DIR* dpre = opendir("/proc/self/fd");
-            if (dpre) {
-                struct dirent* depre;
-                while ((depre = readdir(dpre)) != NULL) {
-                    if (depre->d_name[0] == '.') continue;
-                    char linkpathpre[256];
-                    snprintf(linkpathpre, sizeof(linkpathpre), "/proc/self/fd/%s", depre->d_name);
-                    char bufpre[512];
-                    ssize_t rpre = readlink(linkpathpre, bufpre, sizeof(bufpre)-1);
-                    if (rpre > 0) bufpre[rpre] = '\0'; else strcpy(bufpre, "(unreadable)");
-                    fprintf(fpre, "fd=%s -> %s\n", depre->d_name, bufpre);
-                }
-                closedir(dpre);
-            }
-            fclose(fpre);
-        }
-    }
     close(_inputFd);
     Logger::debug(std::string("DIAG_CGI_closeInput: after close(fd=") + Utils::intToString(_inputFd) + ")");
-    // Snapshot server fds for forensic analysis (post-close)
-    {
-        static int cgi_snap = 0;
-        char path[256];
-        snprintf(path, sizeof(path), "/tmp/ws_fds_cgi_close_%d.txt", ++cgi_snap);
-        FILE* fc = fopen(path, "w");
-        if (fc) {
-            DIR* d = opendir("/proc/self/fd");
-            if (d) {
-                struct dirent* de;
-                while ((de = readdir(d)) != NULL) {
-                    if (de->d_name[0] == '.') continue;
-                    char linkpath[256];
-                    snprintf(linkpath, sizeof(linkpath), "/proc/self/fd/%s", de->d_name);
-                    char buf[512];
-                    ssize_t r = readlink(linkpath, buf, sizeof(buf)-1);
-                    if (r > 0) buf[r] = '\0'; else strcpy(buf, "(unreadable)");
-                    fprintf(fc, "fd=%s -> %s\n", de->d_name, buf);
-                }
-                closedir(d);
-            }
-            fclose(fc);
-        }
-    }
     _inputFd = -1;
     }
 }
@@ -540,7 +491,8 @@ void CGI::_cleanup() {
         
         // Try to kill the entire process group first (negative PID)
         kill(-_pid, SIGTERM);  // Try graceful termination first
-        usleep(100000);  // 100ms grace period for cleanup
+    // Replace usleep with poll timeout (allowed API)
+    poll(NULL, 0, 100);
         if (_isRunning) {
             kill(-_pid, SIGKILL);  // Force kill the process group
             kill(_pid, SIGKILL);   // Also force kill the specific process
