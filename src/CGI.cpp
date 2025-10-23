@@ -7,7 +7,6 @@
 #include <vector>
 #include <cstring>
 #include <cctype>
-#include <cstdio>
 #include <fstream>
 #include <dirent.h>
 
@@ -57,9 +56,8 @@ void CGI::markFinalized() {
 
 // Add a small helper to dump env when debugging
 static void dumpCgiEnv(pid_t pid, const std::map<std::string,std::string>& env) {
-    char path[128];
-    std::snprintf(path, sizeof(path), "/tmp/ws_cgi_env_%d.txt", (int)pid);
-    std::ofstream ofs(path);
+    std::string path = std::string("/tmp/ws_cgi_env_") + Utils::intToString((int)pid) + ".txt";
+    std::ofstream ofs(path.c_str());
     if (!ofs.is_open()) return;
     for (std::map<std::string,std::string>::const_iterator it = env.begin(); it != env.end(); ++it) {
         ofs << it->first << "=" << it->second << "\n";
@@ -147,7 +145,7 @@ bool CGI::execute(const Request& request, const std::string& scriptPath) {
     // For mapped .bla, we'll chdir into handler directory and exec basename
     std::string handlerPath = _cgiPath;
     if (isMappedBla && !handlerPath.empty() && !Utils::fileExists(handlerPath)) {
-        Logger::error("CGI handler not found: " + handlerAbs);
+        Logger::error("CGI handler not found: " + handlerPath);
         close(inPipe[0]); close(inPipe[1]);
         close(outPipe[0]); close(outPipe[1]);
         for (size_t i = 0; envArray[i]; ++i) delete [] envArray[i];

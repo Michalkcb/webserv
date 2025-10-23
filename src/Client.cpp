@@ -907,77 +907,7 @@ void Client::finalizeCgiResponse() {
 
         Logger::debug("Finalizing CGI with buffer length (CPP714): " + Utils::intToString((int)_cgiOutputBuffer.length()));
 
-        // 1) Summary mode: return a small summary instead of the full body
-        const char* summaryEnv = getenv("WEBSERV_DEBUG_RETURN_CGI_SUMMARY");
-        if (summaryEnv && summaryEnv[0] != '\0') {
-            Logger::debug("WEBSERV_DEBUG_RETURN_CGI_SUMMARY set - returning compact CGI summary as response body");
-            std::string summary;
-            summary += "CGI Summary\n";
-            summary += "----------------\n";
-            summary += "Read " + Utils::intToString((int)_cgiInputCopy.size()) + " bytes from stdin.\n";
-
-            size_t header_end_pos2;
-            size_t sep_len2;
-            if (findHeaderBodySeparator(_cgiOutputBuffer, header_end_pos2, sep_len2)) {
-                std::string headersOnly = _cgiOutputBuffer.substr(0, header_end_pos2);
-                // status line
-                size_t pos_status = headersOnly.find("Status:");
-                if (pos_status != std::string::npos) {
-                    size_t eol = headersOnly.find('\n', pos_status);
-                    std::string statusLine = headersOnly.substr(pos_status, eol == std::string::npos ? std::string::npos : eol - pos_status);
-                    summary += statusLine + "\n";
-                }
-                // Content-Type
-                size_t pos_ct = Utils::toLowerCase(headersOnly).find("content-type:");
-                if (pos_ct != std::string::npos) {
-                    size_t lineStart = headersOnly.rfind('\n', pos_ct);
-                    if (lineStart == std::string::npos) lineStart = 0; else lineStart = lineStart + 1;
-                    size_t lineEnd = headersOnly.find('\n', pos_ct);
-                    std::string ctLine = headersOnly.substr(lineStart, (lineEnd == std::string::npos ? headersOnly.length() : lineEnd) - lineStart);
-                    summary += ctLine + "\n";
-                }
-                // Content-Length
-                size_t pos_cl = Utils::toLowerCase(headersOnly).find("content-length:");
-                if (pos_cl != std::string::npos) {
-                    size_t lineStart = headersOnly.rfind('\n', pos_cl);
-                    if (lineStart == std::string::npos) lineStart = 0; else lineStart = lineStart + 1;
-                    size_t lineEnd = headersOnly.find('\n', pos_cl);
-                    std::string clLine = headersOnly.substr(lineStart, (lineEnd == std::string::npos ? headersOnly.length() : lineEnd) - lineStart);
-                    summary += clLine + "\n";
-                }
-            } else {
-                summary += "(No CGI headers found)\n";
-            }
-
-            if (_cgi) {
-                time_t start = _cgi->getStartTime();
-                if (start != 0) {
-                    int elapsed = (int)(time(NULL) - start);
-                    summary += "Execution time: " + Utils::intToString(elapsed) + "s\n";
-                }
-            }
-
-            summary += "----------------\n";
-            summary += "End of summary\n";
-
-            Response sumResp(HTTP_OK);
-            sumResp.setHeader("Content-Type", "text/plain");
-            sumResp.setBody(summary);
-            sumResp.setComplete(true);
-            _response = sumResp;
-            _sendBuffer = _response.toString();
-        } else {
-            // 2) Raw-return mode: return raw CGI stdout as body
-            const char* rawReturnEnv = getenv("WEBSERV_DEBUG_RETURN_RAW_CGI_AS_BODY");
-            if (rawReturnEnv && rawReturnEnv[0] != '\0') {
-                Logger::debug("WEBSERV_DEBUG_RETURN_RAW_CGI_AS_BODY set - returning raw CGI output as response body");
-                Response rawResp(HTTP_OK);
-                rawResp.setHeader("Content-Type", "text/plain");
-                rawResp.setBody(_cgiOutputBuffer);
-                rawResp.setComplete(true);
-                _response = rawResp;
-                _sendBuffer = _response.toString();
-            } else {
+        {
                 // 3) Normal behavior:
                 // If we have already started streaming AND the send buffer begins
                 // with a valid HTTP status line, preserve the existing send buffer
@@ -1051,7 +981,6 @@ void Client::finalizeCgiResponse() {
                         _sendBuffer = _response.toString(false) + body;
                     }
                 }
-            }
         }
     }
 
