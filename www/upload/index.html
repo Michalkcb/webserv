@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>File Upload</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 800px; margin: 40px auto; padding: 0 16px; }
+    h1 { color: #333; }
+    form { margin: 20px 0; padding: 16px; background: #f8f9fa; border-radius: 6px; }
+    input[type="file"] { margin: 8px 0; }
+    .note { color: #555; }
+  </style>
+</head>
+<body>
+  <h1>File Upload</h1>
+  <p class="note">Upload endpoint as configured in the server config. This demo form uses POST to submit a file.</p>
+
+  <form action="/upload" method="post" enctype="multipart/form-data">
+    <label for="file">Choose a file:</label>
+    <input id="file" name="file" type="file" />
+    <button type="submit">Upload</button>
+  </form>
+
+  <p><a href="/">← Back to Home</a></p>
+</body>
+</html>
