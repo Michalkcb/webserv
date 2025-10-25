@@ -1,0 +1,39 @@
+#!/bin/sh
+# Debug version of youpi.bla to understand the execution environment
+
+# Log environment info to stderr (which goes to the server logs)
+echo "DEBUG: PWD=$PWD" >&2
+echo "DEBUG: USER=$USER" >&2
+echo "DEBUG: HOME=$HOME" >&2
+echo "DEBUG: PATH=$PATH" >&2
+echo "DEBUG: whoami=$(whoami)" >&2
+echo "DEBUG: id=$(id)" >&2
+echo "DEBUG: ls -la current dir:" >&2
+ls -la . >&2
+
+# Read all stdin to a temp file
+echo "DEBUG: Creating temp file..." >&2
+TMPFILE=$(mktemp /tmp/debug_youpi_stdin.XXXXXX)
+echo "DEBUG: Temp file: $TMPFILE" >&2
+
+echo "DEBUG: Reading stdin to temp file..." >&2
+cat > "$TMPFILE"
+echo "DEBUG: Finished reading stdin" >&2
+
+echo "DEBUG: Checking temp file size..." >&2
+ls -la "$TMPFILE" >&2
+
+echo "DEBUG: Running wc -c..." >&2
+L=$(wc -c < "$TMPFILE" | tr -d ' ')
+echo "DEBUG: wc result: '$L'" >&2
+
+echo "DEBUG: Outputting headers..." >&2
+printf "Status: 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %s\r\n\r\n" "$L"
+
+echo "DEBUG: Outputting file content..." >&2
+cat "$TMPFILE"
+
+echo "DEBUG: Cleaning up..." >&2
+rm -f "$TMPFILE"
+echo "DEBUG: Script complete" >&2
+exit 0
