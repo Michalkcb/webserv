@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Session Demo — Webserv</title>
+  <style>
+    body { font-family: Arial, Helvetica, sans-serif; max-width:900px; margin:30px auto; padding:20px; }
+    .card { background:#fff;padding:18px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.06); }
+    h1 { margin-top:0 }
+    .controls { margin:12px 0; }
+    input[type=text] { padding:6px 8px;border:1px solid #ccc;border-radius:4px }
+    button { margin-left:8px;padding:8px 12px;border-radius:6px;border:0;background:#007bff;color:#fff;cursor:pointer }
+    button.secondary { background:#6c757d }
+    pre { background:#f7f7f9;padding:10px;border-radius:6px;white-space:pre-wrap }
+    .row { display:flex; gap:10px; align-items:center; margin:8px 0 }
+    label { min-width:80px }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Session Demo</h1>
+    <p>This page demonstrates the server-side session endpoints. It will call the following endpoints on the same origin:</p>
+    <ul>
+      <li><code>/session/create</code> — create a session and return a session id plus Set-Cookie</li>
+      <li><code>/session/set?key=&lt;k&gt;&amp;value=&lt;v&gt;</code> — set a value inside the session (requires cookie)</li>
+      <li><code>/session/get?key=&lt;k&gt;</code> — read a value from the session (requires cookie)</li>
+      <li><code>/session/destroy</code> — invalidate the session (requires cookie)</li>
+    </ul>
+
+    <div class="controls">
+      <div class="row">
+        <button id="btn-create">Create Session</button>
+        <button id="btn-destroy" class="secondary">Destroy Session</button>
+      </div>
+
+      <hr>
+
+      <div class="row">
+        <label for="set-key">Set key</label>
+        <input id="set-key" type="text" placeholder="key" value="username">
+        <label for="set-val">Value</label>
+        <input id="set-val" type="text" placeholder="value" value="alice">
+        <button id="btn-set">Set</button>
+      </div>
+
+      <div class="row">
+        <label for="get-key">Get key</label>
+        <input id="get-key" type="text" placeholder="key" value="username">
+        <button id="btn-get">Get</button>
+      </div>
+
+      <h3>Debug / Output</h3>
+      <p>Browser cookie (document.cookie):</p>
+      <pre id="cookie-out">(none)</pre>
+
+      <p>Last server response (JSON / text):</p>
+      <pre id="resp-out">(none)</pre>
+
+    </div>
+    <p style="margin-top:14px;font-size:0.9em;color:#666">Note: the demo uses fetch(..., {credentials: 'include'}) so the browser sends/receives cookies from the server on the same origin.</p>
+    <p><a href="/">← Back to index</a></p>
+  </div>
+
+  <script>
+  (function(){
+    function el(id){return document.getElementById(id)}
+    function showCookie(){ el('cookie-out').textContent = document.cookie || '(none)'; }
+    function showResp(obj){ try { el('resp-out').textContent = (typeof obj === 'string') ? obj : JSON.stringify(obj, null, 2); } catch(e){ el('resp-out').textContent = String(obj); } }
+
+    async function call(url){
+      try{
+        var r = await fetch(url, { credentials: 'include', cache: 'no-store' });
+        var ct = r.headers.get('content-type') || '';
+        var body = null;
+        if (ct.indexOf('application/json') !== -1) body = await r.json(); else body = await r.text();
+        showCookie();
+        showResp({ status: r.status, statusText: r.statusText, body: body });
+        return { ok: r.ok, status: r.status, body: body };
+      }catch(e){ showResp('Fetch error: ' + e); return { ok:false, error: String(e) }; }
+    }
+
+    el('btn-create').addEventListener('click', function(){ call('/session/create'); });
+    el('btn-destroy').addEventListener('click', function(){ call('/session/destroy'); });
+    el('btn-set').addEventListener('click', function(){
+      var k = encodeURIComponent(el('set-key').value || '');
+      var v = encodeURIComponent(el('set-val').value || '');
+      if (!k) { showResp('Missing key'); return; }
+      call('/session/set?key=' + k + '&value=' + v);
+    });
+    el('btn-get').addEventListener('click', function(){
+      var k = encodeURIComponent(el('get-key').value || '');
+      if (!k) { showResp('Missing key'); return; }
+      call('/session/get?key=' + k);
+    });
+
+    // show initial cookie state
+    showCookie();
+  })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+#!/bin/bash
+echo "Content-Type: text/plain"
+echo ""
+echo "CGI Environment Variables:"
+env | grep -E "(REQUEST_METHOD|QUERY_STRING|CONTENT_TYPE|CONTENT_LENGTH|PATH_INFO|SCRIPT_NAME)" | sort
+echo ""
+echo "Standard input:"
+cat
