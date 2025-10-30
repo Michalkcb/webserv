@@ -12,6 +12,8 @@ public:
         std::vector<std::string> serverNames;
         std::string root;
         std::string index;
+        std::string cgiPath;
+        std::string cgiExtension;
         size_t maxBodySize;
         std::map<int, std::string> errorPages;
         std::vector<Location> locations;

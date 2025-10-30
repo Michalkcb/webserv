@@ -1,6 +1,10 @@
 #include "Session.hpp"
 #include "Utils.hpp"
 #include "Logger.hpp"
+// For secure random seed fallback
+#include <fcntl.h>
+#include <unistd.h>
+#include <errno.h>
 
 // Static member initialization
 std::map<std::string, Session> Session::_sessions;
@@ -139,14 +143,43 @@ size_t Session::getSessionCount() {
 }
 
 std::string Session::_generateSessionId() {
-    // Generate a random session ID
-    std::string chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    // Generate a random session ID using /dev/urandom when possible.
+    const std::string chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    const size_t chars_len = chars.length();
+    const int ID_LEN = 32;
     std::string sessionId;
-    
-    srand(time(NULL) + rand());
-    for (int i = 0; i < 32; ++i) {
-        sessionId += chars[rand() % chars.length()];
+    sessionId.reserve(ID_LEN);
+
+    int fd = open("/dev/urandom", O_RDONLY);
+    if (fd != -1) {
+        unsigned char buf[ID_LEN];
+        ssize_t r = read(fd, buf, ID_LEN);
+        close(fd);
+        if (r == ID_LEN) {
+            for (int i = 0; i < ID_LEN; ++i) {
+                sessionId += chars[buf[i] % chars_len];
+            }
+            return sessionId;
+        }
+        // fallthrough to fallback if read failed
     }
-    
+
+    // Fallback: deterministic xorshift32 PRNG seeded from time + stack address.
+    // Avoid using getpid()/rand()/srand() which are not allowed by the subject.
+    unsigned int seed = (unsigned int)time(NULL);
+    // mix in some stack address entropy
+    // Use pointer value mixed into seed without relying on uintptr_t typedef
+    unsigned long adr = (unsigned long)&seed;
+    seed ^= (unsigned int)(adr & 0xFFFFFFFFUL);
+
+    // xorshift32
+    unsigned int x = seed ? seed : 0xdeadbeefu;
+    for (int i = 0; i < ID_LEN; ++i) {
+        // advance PRNG
+        x ^= x << 13;
+        x ^= x >> 17;
+        x ^= x << 5;
+        sessionId += chars[x % chars_len];
+    }
     return sessionId;
 }

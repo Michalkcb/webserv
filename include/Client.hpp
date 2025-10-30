@@ -52,8 +52,6 @@ private:
 public:
     Client();
     Client(int fd);
-    Client(const Client& other);
-    Client& operator=(const Client& other);
     ~Client();
 
     // Getters
@@ -70,7 +68,7 @@ public:
     void setState(State state);
     void setResponse(const Response& response);
     void setKeepAlive(bool keepAlive);
-    void setCgi(CGI* cgi);
+    bool setCgi(CGI* cgi);
 
     
     // Request/Response handling
@@ -96,18 +94,16 @@ public:
     void handleCgiInput();
     void handleCgiOutput();
     void finalizeCgiResponse();
-    bool isCgiFinalized() const;
     bool isCgiReady() const;
     bool isWaitingForCgiWrite() const;
 
 private:
     // Make Client non-copyable at the API level: copy ctor and assignment
-    // are declared but not publicly usable. They remain declared here to
-    // avoid accidental implicit generation; Server will store pointers so
-    // copies should not be necessary.
-    // Note: definitions may exist in the .cpp for diagnostic logs but we
-    // mark these as private to prevent accidental external copying.
-    // (If you prefer, remove definitions from src/Client.cpp as well.)
+    // are declared here (definitions exist for diagnostics) but should not
+    // be used by external code. Keeping them private reduces accidental
+    // copying and helps ensure unique ownership of CGI instances.
+    Client(const Client& other);
+    Client& operator=(const Client& other);
     // Request handlers
     Response _handleGetRequest(const Config::ServerBlock& serverConfig, const Location* location);
     Response _handlePostRequest(const Config::ServerBlock& serverConfig, const Location* location);
@@ -125,7 +121,19 @@ private:
     unsigned long _clientNumber;
     // Mark whether finalizeCgiResponse() has already been executed for this CGI
     bool _cgiFinalized;
+    // When other code paths detect that CGI should be finalized but defer
+    // to a single canonical place to perform the finalize, they set this
+    // flag. The Server run-loop will later invoke finalizeCgiResponse() on
+    // clients that have requested finalization to centralize the action.
+    bool _cgiFinalizeRequested;
+    
     size_t _stageBodyChunkForCgi(size_t maxBytes);
+public:
+    // Request that the Client be finalized by the centralized finalizer.
+    void requestCgiFinalize();
+    bool isCgiFinalizeRequested() const;
+    void clearCgiFinalizeRequest();
+    bool isCgiFinalized() const;
 };
 
 #endif

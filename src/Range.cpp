@@ -160,10 +160,15 @@ bool Range::isRangeRequest(const std::string& rangeHeader) {
 std::string Range::generateBoundary() {
     std::string chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     std::string boundary = "webserv_multipart_";
-    
-    srand(time(NULL) + rand());
+    // Simple xorshift32 PRNG seeded from time to avoid using rand()
+    unsigned int seed = (unsigned int)time(NULL);
+    unsigned int x = seed ? seed : 0xdeadbeef;
     for (int i = 0; i < 16; ++i) {
-        boundary += chars[rand() % chars.length()];
+        // xorshift32
+        x ^= x << 13;
+        x ^= x >> 17;
+        x ^= x << 5;
+        boundary += chars[x % chars.length()];
     }
     
     return boundary;

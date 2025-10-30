@@ -22,6 +22,11 @@ private:
     time_t _startTime;
     time_t _lastOutputTime;
     size_t _totalBytesRead;
+    unsigned long _execId;
+    unsigned long _allocId;
+    // Owning client pointer to enforce canonical ownership of this CGI
+    // instance. We forward-declare Client in callers to avoid circular includes.
+    void* _owner;
     
     void _setupEnvironment(const Request& request);
     char** _createEnvArray() const;
@@ -53,11 +58,17 @@ public:
     int getOutputFd() const;
     time_t getStartTime() const;
     time_t getLastActivityTime() const;
+    int getPid() const;
+    unsigned long getExecId() const;
+    unsigned long getAllocId() const;
 
     // Finalization guard: prevents multiple clients from finalizing the same
     // CGI execution instance (useful when Client objects are copied).
     bool isFinalized() const;
     void markFinalized();
+    // Owner management
+    void setOwner(void* owner);
+    void* getOwner() const;
     
     // Generate response from CGI output
     Response parseHeaders(const std::string& headersStr);

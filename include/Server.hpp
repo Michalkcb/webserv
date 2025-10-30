@@ -11,6 +11,11 @@ private:
     std::vector<int> _serverSockets;
     std::map<int, Client*> _clients;
     std::vector<struct pollfd> _pollFds;
+    // Parallel vector mapping pollfd index -> owner (Client* for client-related fds,
+    // NULL for server/listener sockets). This avoids having to match fds by value
+    // in the event loop and prevents dispatching events to the wrong client when
+    // file descriptor integers are reused.
+    std::vector<void*> _pollOwners;
     bool _running;
     
     // Socket management

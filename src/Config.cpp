@@ -136,6 +136,10 @@ void Config::_parseServerBlock(std::ifstream& file, ServerBlock& server) {
             server.serverNames = values;
         } else if (directive == "root") {
             if (!values.empty()) server.root = values[0];
+        } else if (directive == "cgi_path") {
+            if (!values.empty()) server.cgiPath = values[0];
+        } else if (directive == "cgi_ext" || directive == "cgi_extension") {
+            if (!values.empty()) server.cgiExtension = values[0];
         } else if (directive == "index") {
             if (!values.empty()) server.index = values[0];
         } else if (directive == "client_max_body_size") {
@@ -167,7 +171,30 @@ void Config::_parseServerBlock(std::ifstream& file, ServerBlock& server) {
         defaultLocation.addAllowedMethod("GET");
         defaultLocation.addAllowedMethod("POST");
         defaultLocation.addAllowedMethod("DELETE");
+        // Propagate server-level CGI settings to default location
+        if (!server.cgiPath.empty()) defaultLocation.setCgiPath(server.cgiPath);
+        if (!server.cgiExtension.empty()) defaultLocation.setCgiExtension(server.cgiExtension);
         server.locations.push_back(defaultLocation);
+    }
+
+    // Ensure there is a /cgi-bin location to serve scripts placed under /cgi-bin
+    bool hasCgiBin = false;
+    for (size_t i = 0; i < server.locations.size(); ++i) {
+        if (server.locations[i].getPath() == "/cgi-bin") { hasCgiBin = true; break; }
+    }
+    if (!hasCgiBin) {
+        Location cgiLocation("/cgi-bin");
+        // Default root for cgi-bin is server.root + "/cgi-bin"
+        std::string cgiRoot = server.root;
+        if (!cgiRoot.empty() && cgiRoot[cgiRoot.length()-1] == '/') cgiRoot.erase(cgiRoot.length()-1);
+        cgiRoot += "/cgi-bin";
+        cgiLocation.setRoot(cgiRoot);
+        cgiLocation.addAllowedMethod("GET");
+        cgiLocation.addAllowedMethod("POST");
+        cgiLocation.setAutoindex(false);
+        if (!server.cgiPath.empty()) cgiLocation.setCgiPath(server.cgiPath);
+        if (!server.cgiExtension.empty()) cgiLocation.setCgiExtension(server.cgiExtension);
+        server.locations.push_back(cgiLocation);
     }
 }
 

@@ -49,7 +49,10 @@
     <div class="container">
         <h1>🚀 Welcome to Webserv!</h1>
         <p>Your HTTP/1.1 compliant web server is running successfully!</p>
-        
+        li>
+                <li>Non-blocking I/O with poll()</li>
+            </ul>
+        </div>
         <div class="feature">
             <h3>✅ Features Supported:</h3>
             <ul>
@@ -59,10 +62,7 @@
                 <li>File uploads</li>
                 <li>CGI script execution</li>
                 <li>Custom error pages</li>
-                <li>Virtual hosts support</li>
-                <li>Non-blocking I/O with poll()</li>
-            </ul>
-        </div>
+                <li>Virtual hosts support</
         
         <div class="feature">
             <h3>🔧 Configuration:</h3>
@@ -74,8 +74,12 @@
             <h3>🔗 Try These Links:</h3>
             <a href="/static/index.html">Static Files</a>
             <a href="/upload.html">File Upload</a>
+            <button id="run-php-btn" style="margin:10px;padding:10px 20px;background-color:#28a745;border:none;color:white;border-radius:5px;cursor:pointer;">Run PHP CGI</button>
+            <button id="run-shell-btn" style="margin:10px;padding:10px 20px;background-color:#17a2b8;border:none;color:white;border-radius:5px;cursor:pointer;">Run Shell Script</button>
+            <button id="run-py-btn" style="margin:10px;padding:10px 20px;background-color:#6f42c1;border:none;color:white;border-radius:5px;cursor:pointer;">Run Python CGI</button>
             <button id="cgi-delete-btn" style="margin:10px;padding:10px 20px;background-color:#dc3545;border:none;color:white;border-radius:5px;cursor:pointer;">Delete</button>
             <a href="/nonexistent">404 Error</a>
+            <a href="/session_demo.html">Session Demo</a>
         </div>
         
         <div class="feature">
@@ -337,6 +341,40 @@
                     // Run the same flow as pressing the Run Test button so the result is shown
                     document.getElementById('perf-run').click();
                 } catch(e) { console.error('Delete button handler error', e); }
+            });
+        }
+        // Wire Run PHP and Run Shell buttons to set the test UI and execute a GET
+        var runPhpBtn = document.getElementById('run-php-btn');
+        if (runPhpBtn) {
+            runPhpBtn.addEventListener('click', function(){
+                try {
+                    if (perfUrlEl) perfUrlEl.value = '/cgi-bin/hello.php';
+                    if (effectMethodEl) effectMethodEl.value = 'GET';
+                    updatePostBodyUI();
+                    document.getElementById('perf-run').click();
+                } catch(e) { console.error('run-php handler', e); }
+            });
+        }
+        var runShellBtn = document.getElementById('run-shell-btn');
+        if (runShellBtn) {
+            runShellBtn.addEventListener('click', function(){
+                try {
+                    if (perfUrlEl) perfUrlEl.value = '/echo.sh';
+                    if (effectMethodEl) effectMethodEl.value = 'GET';
+                    updatePostBodyUI();
+                    document.getElementById('perf-run').click();
+                } catch(e) { console.error('run-shell handler', e); }
+            });
+        }
+        var runPyBtn = document.getElementById('run-py-btn');
+        if (runPyBtn) {
+            runPyBtn.addEventListener('click', function(){
+                try {
+                    if (perfUrlEl) perfUrlEl.value = '/cgi-bin/hello.py';
+                    if (effectMethodEl) effectMethodEl.value = 'GET';
+                    updatePostBodyUI();
+                    document.getElementById('perf-run').click();
+                } catch(e) { console.error('run-py handler', e); }
             });
         }
     })();

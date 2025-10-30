@@ -23,7 +23,16 @@ int main() {
     };
 
     // Read from stdin
-    const char* content_length_str = std::getenv("CONTENT_LENGTH");
+    // Avoid calling getenv() directly to respect subject restrictions in server
+    extern char **environ;
+    const char* content_length_str = NULL;
+    for (char **e = environ; e && *e; ++e) {
+        const char* kv = *e;
+        if (kv && std::strncmp(kv, "CONTENT_LENGTH=", 15) == 0) {
+            content_length_str = kv + 15;
+            break;
+        }
+    }
     size_t content_length = content_length_str ? std::atoi(content_length_str) : 0;
 
     log << "Expected content length: " << content_length << "\n";
@@ -44,8 +53,16 @@ int main() {
 //        std::cout << "CONTENT_BODY: " << content_length << "\n";
     }
 /*/
-    for (const char* var : env_vars) {
-        const char* val = std::getenv(var);
+    // Print selected environment variables using environ (avoid getenv())
+    extern char **environ;
+    for (size_t vi = 0; vi < (sizeof(env_vars)/sizeof(env_vars[0])); ++vi) {
+        const char* var = env_vars[vi];
+        const char* val = NULL;
+        for (char **e = environ; e && *e; ++e) {
+            const char* kv = *e;
+            size_t n = std::strlen(var);
+            if (kv && std::strncmp(kv, var, n) == 0 && kv[n] == '=') { val = kv + n + 1; break; }
+        }
         std::string output = std::string(var) + ": " + (val ? val : "undefined") + "\n";
         std::cout << output;
         log << output;

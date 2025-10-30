@@ -1,6 +1,8 @@
 #include "Server.hpp"
 #include "Utils.hpp"
 #include "Logger.hpp"
+#include <fstream>
+#include <ctime>
 #include <fcntl.h>
 #include <netinet/tcp.h>
 #include <netdb.h>
@@ -94,6 +96,24 @@ void Server::run() {
 
         // Handle events on all file descriptors
         _handlePollEvents();
+        // After handling poll events, process any requested CGI finalizations
+        // in a single canonical place to avoid races between different call
+        // sites attempting to finalize the same CGI instance.
+        for (std::map<int, Client*>::iterator it = _clients.begin(); it != _clients.end(); ++it) {
+            Client* client = it->second;
+            if (client->isCgiFinalizeRequested()) {
+                // Only finalize if the client still has an active CGI and hasn't
+                // already been finalized. This avoids duplicates where the
+                // POLLIN path already finalized the CGI earlier in the same
+                // loop iteration.
+                if (client->getCgi() && !client->isCgiFinalized()) {
+                    std::ofstream d("finalize_cgi_debug.log", std::ios::app);
+                    d << "PROCESS_QUEUE finalize client=" << (void*)client << " fd=" << client->getFd() << " ts=" << (unsigned long)time(NULL)*1000UL << "\n";
+                    client->finalizeCgiResponse();
+                }
+                client->clearCgiFinalizeRequest();
+            }
+        }
     }
     _cleanup();
 }
@@ -103,11 +123,13 @@ void Server::run() {
 
 void Server::_updatePollFds() {
     _pollFds.clear();
+    _pollOwners.clear();
 
     // 1. Add all listening server sockets
     for (size_t i = 0; i < _serverSockets.size(); ++i) {
         struct pollfd pfd = {_serverSockets[i], POLLIN, 0};
         _pollFds.push_back(pfd);
+        _pollOwners.push_back(NULL);
     }
 
     // 2. Add all client sockets and their CGI pipes
@@ -119,13 +141,15 @@ void Server::_updatePollFds() {
         if (client->getState() == Client::SENDING_RESPONSE || !client->getSendBuffer().empty()) {
             client_pfd.events |= POLLOUT;
         }
-        _pollFds.push_back(client_pfd);
+    _pollFds.push_back(client_pfd);
+    _pollOwners.push_back((void*)client);
 
         // If client is waiting to write to a CGI, monitor its input pipe for writability
         if (client->isWaitingForCgiWrite()) {
             if (client->getCgi() && client->getCgi()->getInputFd() != -1) {
                 struct pollfd cgi_in_pfd = {client->getCgi()->getInputFd(), POLLOUT, 0};
                 _pollFds.push_back(cgi_in_pfd);
+                _pollOwners.push_back((void*)client);
             }
         }
 
@@ -134,122 +158,69 @@ void Server::_updatePollFds() {
             if (client->getCgi()->getOutputFd() != -1) {
                 struct pollfd cgi_out_pfd = {client->getCgi()->getOutputFd(), POLLIN, 0};
                 _pollFds.push_back(cgi_out_pfd);
+                _pollOwners.push_back((void*)client);
             }
         }
     }
 }
 
 void Server::_handlePollEvents() {
-    // Check for new connections on server sockets first
+    // 1) Server sockets (listening fds)
     for (size_t i = 0; i < _serverSockets.size(); ++i) {
         short rev = _pollFds[i].revents;
         if (rev) {
             Logger::debug("Server socket fd=" + Utils::intToString(_serverSockets[i]) + ", revents=" + Utils::intToString(rev));
         }
         if (rev & POLLIN) {
-            Logger::debug("POLLIN on server socket fd=" + Utils::intToString(_serverSockets[i]) + ", accepting connection");
             _acceptNewConnection(_serverSockets[i]);
         }
     }
 
+    // 2) Client-related fds and CGI pipes. Dispatch using _pollOwners to avoid
+    //    fd-number-based misrouting when fds are recycled by the kernel.
     std::vector<int> clients_to_remove;
+    for (size_t i = _serverSockets.size(); i < _pollFds.size(); ++i) {
+        short revents = _pollFds[i].revents;
+        if (revents == 0) continue;
+        void* owner = NULL;
+        if (i < _pollOwners.size()) owner = _pollOwners[i];
+        if (!owner) continue;
+        Client* client = (Client*)owner;
+        int current_fd = _pollFds[i].fd;
 
-    // Check for events on client sockets and CGI pipes
-    for (std::map<int, Client*>::iterator it = _clients.begin(); it != _clients.end(); ++it) {
-        Client* client = it->second;
-        int clientFd = it->first;
-
-        // Find the pollfd for the client's main socket, input pipe, and output pipe
-        for (size_t i = _serverSockets.size(); i < _pollFds.size(); ++i) {
-            int current_fd = _pollFds[i].fd;
-            short revents = _pollFds[i].revents;
-
-            if (revents == 0) continue;
-
-            // Event on the client's main socket
-                    if (current_fd == clientFd) {
-                // Handle HUP/ERR carefully: do not write unless POLLOUT is also signaled
-                        if (revents & (POLLHUP | POLLERR)) {
-                    // Mark peer as closed to stop expecting more reads
-                    client->markPeerClosed();
-                    Logger::debug("Poll revents on client fd=" + Utils::intToString(clientFd) + ": HUP/ERR. sendBufferLen=" + Utils::intToString((int)client->getSendBuffer().length()));
-                            // Only attempt to send remaining data if POLLOUT is also set
-                            if ((revents & POLLOUT) && !client->getSendBuffer().empty()) {
-                                client->sendData();
-                            }
-                    // If nothing to send, finish the client
-                    if (client->getSendBuffer().empty()) {
-                        client->setState(Client::FINISHED);
-                    }
-                } else {
-                    // Handle POLLOUT before POLLIN to avoid a race where we
-                    // finish sending a response, reset the client for
-                    // keep-alive, and then accidentally clear any already-read
-                    // bytes of the next pipelined request within the same
-                    // poll iteration. Sending first allows the reset to occur
-                    // before we read the next request, preserving correctness.
-                        if (revents & POLLOUT) {
-                            Logger::debug("POLLOUT on fd=" + Utils::intToString(clientFd) + ", sendBufferLen=" + Utils::intToString((int)client->getSendBuffer().length()));
-                            client->sendData();
-                        }
-                        if (revents & POLLIN)  {
-                            Logger::debug("POLLIN on fd=" + Utils::intToString(clientFd));
-                            client->receiveData();
-                            client->processRequest(_config);
-                        }
+        // Event on client's main socket
+        if (current_fd == client->getFd()) {
+            if (revents & (POLLHUP | POLLERR)) {
+                client->markPeerClosed();
+                Logger::debug("Poll revents on client fd=" + Utils::intToString(client->getFd()) + ": HUP/ERR. sendBufferLen=" + Utils::intToString((int)client->getSendBuffer().length()));
+                if ((revents & POLLOUT) && !client->getSendBuffer().empty()) client->sendData();
+                if (client->getSendBuffer().empty()) client->setState(Client::FINISHED);
+            } else {
+                if (revents & POLLOUT) client->sendData();
+                if (revents & POLLIN) {
+                    client->receiveData();
+                    client->processRequest(_config);
                 }
             }
+            if (client->getState() == Client::FINISHED || client->getState() == Client::ERROR_STATE)
+                clients_to_remove.push_back(client->getFd());
+            continue;
+        }
 
-            // Events on the client's CGI pipes
-            if ((client->getState() == Client::CGI_PROCESSING || client->getState() == Client::CGI_STREAMING_BODY) && client->getCgi()) {
-                if (current_fd == client->getCgi()->getInputFd() && (revents & POLLOUT)) {
-                    client->handleCgiInput();
-                }
-                if (current_fd == client->getCgi()->getOutputFd()) {
-                    // Czytaj dane/EOF z CGI stdout zarówno przy POLLIN jak i przy POLLHUP/ERR.
-                    // To pozwala wykryć EOF (read==0) gdy jądro sygnalizuje jedynie HUP.
-                    if (revents & (POLLIN | POLLHUP | POLLERR)) {
-                        client->handleCgiOutput();
-                    }
-                }
+        // Events on CGI pipes
+        if (client->getCgi()) {
+            if (current_fd == client->getCgi()->getInputFd() && (revents & POLLOUT)) {
+                client->handleCgiInput();
+            }
+            if (current_fd == client->getCgi()->getOutputFd() && (revents & (POLLIN | POLLHUP | POLLERR))) {
+                client->handleCgiOutput();
             }
         }
-
-        // Check if the client's state has changed to finished
-        if (client->getState() == Client::FINISHED || client->getState() == Client::ERROR_STATE) {
-            clients_to_remove.push_back(clientFd);
-        }
     }
 
-    // Safely remove clients after iterating
-    for (size_t i = 0; i < clients_to_remove.size(); ++i) {
-        _closeClient(clients_to_remove[i]);
-    }
-}
-
-bool Server::isRunning() const {
-    return _running;
-}
-
-void Server::_setupServerSockets() {
-    for (Config::ServerIterator it = _config.begin(); it != _config.end(); ++it) {
-        const Config::ServerBlock& server = *it;
-        
-        try {
-            int serverSocket = _createServerSocket(Config::getHost(server), Config::getPort(server));
-            _serverSockets.push_back(serverSocket);
-            
-            Logger::info("Listening on " + Config::getHost(server) + ":" + Utils::intToString(Config::getPort(server)));
-        } catch (const std::exception& e) {
-            Logger::error("Failed to create server socket for " + 
-                         Config::getHost(server) + ":" + Utils::intToString(Config::getPort(server)) + 
-                         ": " + std::string(e.what()));
-            throw;
-        }
-    }
-    
-    if (_serverSockets.empty()) {
-        throw std::runtime_error("No server sockets created");
+    // Close clients that reached terminal state
+    for (size_t ri = 0; ri < clients_to_remove.size(); ++ri) {
+        _closeClient(clients_to_remove[ri]);
     }
 }
 
@@ -342,6 +313,31 @@ void Server::_acceptNewConnection(int serverSocket) {
     // Allocate Client on the heap to ensure single owner semantics
     Client* newClient = new Client(clientSocket);
     _clients[clientSocket] = newClient;
+}
+
+void Server::_setupServerSockets() {
+    const std::vector<Config::ServerBlock>& servers = _config.getServers();
+    if (servers.empty()) {
+        throw std::runtime_error("No servers configured");
+    }
+
+    // Create one listening socket per configured server block.
+    // If creation fails for any, clean up and propagate the error.
+    std::vector<int> created;
+    try {
+        for (size_t i = 0; i < servers.size(); ++i) {
+            const Config::ServerBlock& sb = servers[i];
+            int sock = _createServerSocket(Config::getHost(sb), Config::getPort(sb));
+            _serverSockets.push_back(sock);
+            created.push_back(sock);
+            Logger::info("Listening on " + Config::getHost(sb) + ":" + Utils::intToString(Config::getPort(sb)));
+        }
+    } catch (...) {
+        // cleanup
+        for (size_t i = 0; i < created.size(); ++i) close(created[i]);
+        _serverSockets.clear();
+        throw;
+    }
 }
 
 void Server::_handleClientRead(int clientFd) {
@@ -510,7 +506,14 @@ void Server::_checkCgiCompletion() {
                         if (client->getCgi() == NULL) {
                             Logger::debug("Server::_checkCgiCompletion: CGI already finalized elsewhere, skipping finalizeCgiResponse\n");
                         } else {
-                            client->finalizeCgiResponse();
+                Logger::debug("FINALIZE_CALLSITE:server_check client_fd=" + Utils::intToString(client->getFd()));
+                                    {
+                                        std::ofstream d("finalize_cgi_debug.log", std::ios::app);
+                                        unsigned long ts = (unsigned long)time(NULL) * 1000UL;
+                                        d << "CALLSITE:server_check ts=" << ts << " client_socket=" << client->getFd() << " client_ptr=" << (void*)client << "\n";
+                                    }
+                                    // Defer to the centralized finalizer instead of finalizing here.
+                                    client->requestCgiFinalize();
                         }
                     }
                 }

@@ -1,20 +1,41 @@
 #include "CGI.hpp"
 #include "Utils.hpp"
 #include "Logger.hpp"
+#include <stdio.h>
 #include <fcntl.h>
 #include <signal.h>
 #include <unistd.h>
+#include <stdlib.h>
 #include <vector>
 #include <cstring>
 #include <cctype>
 #include <fstream>
 #include <dirent.h>
 
+// Allocation counter for CGI objects to disambiguate reused addresses
+static unsigned long g_cgiAllocCounter = 0;
+
 CGI::CGI() : _pid(-1), _inputFd(-1), _outputFd(-1), _isRunning(false), _finalized(false),
-             _startTime(0), _lastOutputTime(0), _totalBytesRead(0) {}
+             _startTime(0), _lastOutputTime(0), _totalBytesRead(0), _execId(0), _allocId(++g_cgiAllocCounter), _owner(NULL) {}
 
 CGI::CGI(const std::string& cgiPath) : _cgiPath(cgiPath), _pid(-1), _inputFd(-1), _outputFd(-1), _isRunning(false), _finalized(false),
-             _startTime(0), _lastOutputTime(0), _totalBytesRead(0) {}
+             _startTime(0), _lastOutputTime(0), _totalBytesRead(0), _execId(0), _allocId(++g_cgiAllocCounter), _owner(NULL) {}
+
+
+// Owner management
+void CGI::setOwner(void* owner) {
+    _owner = owner;
+    // Registry audit: record when owner is set
+    std::ofstream rf("registry_audit.log", std::ios::app);
+    if (rf.is_open()) {
+        rf << "SET_OWNER ts=" << (unsigned long)time(NULL)*1000UL << " cgi_ptr=" << (void*)this << " owner=" << owner
+           << " pid=" << _pid << " exec=" << _execId << " alloc=" << _allocId << "\n";
+    }
+}
+
+void* CGI::getOwner() const {
+    return _owner;
+}
 
 // Removed copy ctor / operator= definitions to prevent unsafe copying
 // ...existing code...
@@ -168,8 +189,33 @@ bool CGI::execute(const Request& request, const std::string& scriptPath) {
         close(inPipe[1]); close(outPipe[0]);
         dup2(inPipe[0],  STDIN_FILENO);
         dup2(outPipe[1], STDOUT_FILENO);
-        int devnull = open("/dev/null", O_WRONLY);
-        if (devnull != -1) { dup2(devnull, STDERR_FILENO); close(devnull); }
+        // Redirect stderr to a per-CGI file in /tmp so exec/ runtime errors
+        // from the child are captured for debugging instead of being discarded.
+        {
+            // Use time-based suffix (or /dev/urandom) instead of getpid() to avoid using getpid()
+            std::string suffix;
+            int urd = open("/dev/urandom", O_RDONLY);
+            if (urd != -1) {
+                unsigned int v = 0;
+                if (read(urd, &v, sizeof(v)) == (ssize_t)sizeof(v)) {
+                    std::ostringstream s; s << v;
+                    suffix = s.str();
+                }
+                close(urd);
+            }
+            if (suffix.empty()) {
+                suffix = Utils::intToString((int)time(NULL));
+            }
+            std::string errPath = std::string("/tmp/ws_cgi_err_") + suffix + std::string(".log");
+            int errfd = open(errPath.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            if (errfd != -1) {
+                dup2(errfd, STDERR_FILENO);
+                close(errfd);
+            } else {
+                int devnull = open("/dev/null", O_WRONLY);
+                if (devnull != -1) { dup2(devnull, STDERR_FILENO); close(devnull); }
+            }
+        }
 
         // Set correct working directory for CGI (subject requirement):
         // - for mapped .bla: use directory of handler (handlerAbs)
@@ -192,23 +238,65 @@ bool CGI::execute(const Request& request, const std::string& scriptPath) {
             // exec basename of handler within its directory
             std::string::size_type slash = handlerPath.rfind('/');
             std::string handlerBase = (slash == std::string::npos) ? handlerPath : handlerPath.substr(slash + 1);
-            argv.push_back(const_cast<char*>(handlerBase.c_str()));
+            // Use strdup to allocate stable, independent C-strings for execve
+            argv.push_back(strdup(handlerBase.c_str()));
             // Pass the target script path as first argument to the handler
-            argv.push_back(const_cast<char*>(scriptPath.c_str()));
+            argv.push_back(strdup(scriptPath.c_str()));
         } else {
             std::string interp = getCgiInterpreter(scriptPath);
-            if (!interp.empty()) {
-                argv.push_back(const_cast<char*>(interp.c_str()));
-                argv.push_back(const_cast<char*>(scriptPath.c_str())); // use full path
+            // compute script basename (used when we've chdir'd into the script dir)
+            std::string::size_type slash = scriptPath.rfind('/');
+            std::string scriptBase = (slash == std::string::npos) ? scriptPath : scriptPath.substr(slash + 1);
+                if (!interp.empty()) {
+                // When invoking an interpreter, pass the script basename since
+                // we've chdir'ed into the script's directory above.
+                // Allocate stable C-strings with strdup to avoid any lifetime
+                // or allocator aliasing issues observed in production.
+                argv.push_back(strdup(interp.c_str()));
+                std::string ext = Utils::getFileExtension(scriptPath);
+                    // Ensure environment variables that some interpreter frontends
+                    // consult (notably SCRIPT_FILENAME / PATH_TRANSLATED) are
+                    // consistent with the chdir() above. We'll update the
+                    // envArray entries directly because execve uses envArray
+                    // rather than the process environ.
+                    std::string newScriptFn = scriptBase;
+                    for (size_t ei = 0; envArray[ei]; ++ei) {
+                        if (std::strncmp(envArray[ei], "SCRIPT_FILENAME=", 15) == 0) {
+                            free(envArray[ei]);
+                            std::string nv = std::string("SCRIPT_FILENAME=") + newScriptFn;
+                            envArray[ei] = strdup(nv.c_str());
+                        }
+                        if (std::strncmp(envArray[ei], "PATH_TRANSLATED=", 15) == 0) {
+                            free(envArray[ei]);
+                            std::string nv2 = std::string("PATH_TRANSLATED=") + newScriptFn;
+                            envArray[ei] = strdup(nv2.c_str());
+                        }
+                    }
+                if (ext == "php") {
+                    argv.push_back(strdup("-f"));
+                    argv.push_back(strdup(scriptBase.c_str()));
+                } else {
+                    argv.push_back(strdup(scriptBase.c_str()));
+                }
             } else {
-                argv.push_back(const_cast<char*>(scriptPath.c_str())); // execute script directly
+                // Execute the script directly using the original path
+                argv.push_back(strdup(scriptPath.c_str())); // execute script directly
             }
         }
         argv.push_back(NULL);
 
-        // execve program is argv[0]
-        execve(argv[0], &argv[0], envArray);
-        _exit(127);
+    // execve program is argv[0]
+    execve(argv[0], &argv[0], envArray);
+    // If execve returns, it failed. Write an explanatory message to
+    // the redirected stderr (we dup2'd STDERR_FILENO earlier) so the
+    // per-CGI error log contains the errno and program name.
+    // Use write() (allowed) instead of dprintf.
+    {
+        std::string prog = argv[0] ? argv[0] : "(null)";
+        std::string msg = std::string("execve(") + prog + std::string(") failed: ") + strerror(errno) + std::string("\n");
+        ssize_t w = write(STDERR_FILENO, msg.c_str(), msg.length()); (void)w;
+    }
+    _exit(127);
     }
 
     close(inPipe[0]); close(outPipe[1]);
@@ -219,6 +307,10 @@ bool CGI::execute(const Request& request, const std::string& scriptPath) {
 
     _isRunning      = true;
     _startTime      = time(NULL);
+    // Unique execution id to disambiguate rapid re-use of heap addresses or
+    // identical second-resolution start times. Use a process-wide counter.
+    static unsigned long g_cgiExecCounter = 0;
+    _execId = ++g_cgiExecCounter;
     _lastOutputTime = _startTime;
     _totalBytesRead = 0;
 
@@ -271,7 +363,15 @@ bool CGI::isRunning() const {
     int result = waitpid(_pid, &status, WNOHANG);
     Logger::debug("CGI::isRunning() waitpid result=" + Utils::intToString(result) + ", pid=" + Utils::intToString(_pid) + ", errno=" + Utils::intToString(errno));
     if (result == _pid) { // child transitioned to a waited state
-        Logger::debug("CGI::isRunning(): child has exited or changed state (status=" + Utils::intToString(status) + ")");
+        if (WIFEXITED(status)) {
+            int code = WEXITSTATUS(status);
+            Logger::debug("CGI::isRunning(): child exited with status=" + Utils::intToString(code));
+        } else if (WIFSIGNALED(status)) {
+            int sig = WTERMSIG(status);
+            Logger::debug("CGI::isRunning(): child terminated by signal=" + Utils::intToString(sig));
+        } else {
+            Logger::debug("CGI::isRunning(): child changed state (status=" + Utils::intToString(status) + ")");
+        }
         const_cast<CGI*>(this)->_isRunning = false;
         return false;
     }
@@ -354,13 +454,14 @@ void CGI::terminate() {
         // Try to kill the entire process group first (negative PID)
         // This ensures that any child processes spawned by the CGI are also terminated
         kill(-_pid, SIGTERM);
-    // Replace usleep with poll timeout (allowed API)
-    poll(NULL, 0, 100);
+        // Give the process a short chance to exit; do not block here.
+        // Main loop (Server::run) will detect termination via waitpid(WNOHANG)
+        // or CGI::isRunning checks. Send SIGKILL afterwards to ensure termination.
         kill(-_pid, SIGKILL);
-        
         // Also kill the specific process if it's still running
         kill(_pid, SIGKILL);
-        waitpid(_pid, NULL, 0);
+        // Reap without blocking (best effort)
+        waitpid(_pid, NULL, WNOHANG);
         _isRunning = false;
     }
     _cleanup();
@@ -389,6 +490,10 @@ int CGI::getInputFd() const { return _inputFd; }
 int CGI::getOutputFd() const { return _outputFd; }
 time_t CGI::getStartTime() const { return _startTime; }
 time_t CGI::getLastActivityTime() const { return _lastOutputTime; }
+
+int CGI::getPid() const { return _pid; }
+unsigned long CGI::getExecId() const { return _execId; }
+unsigned long CGI::getAllocId() const { return _allocId; }
 
 Response CGI::parseHeaders(const std::string& headersStr) {
     Response response;
@@ -469,14 +574,38 @@ bool CGI::isCgiScript(const std::string& path, const std::string& cgiExtension) 
 }
 
 std::string CGI::getCgiInterpreter(const std::string& scriptPath) {
+    // If the script file is executable or starts with a shebang (#!)
+    // prefer executing it directly. This allows files that are named
+    // with a different extension (e.g. youpi.php) but are actually
+    // shell scripts to run without requiring an interpreter binary
+    // (or when e.g. php-cgi is not installed).
+    if (Utils::fileExists(scriptPath)) {
+        // Only allow direct execution when the file starts with a shebang (#!).
+        // Treating any executable file as directly runnable caused issues when
+        // text scripts (e.g. .php without shebang) were marked executable but
+        // have no interpreter declared — execve would fail with ENOEXEC and
+        // produce no useful stderr. Prefer shebang detection and otherwise
+        // fall back to extension-based interpreter mapping.
+        std::ifstream ifs(scriptPath.c_str());
+        if (ifs.is_open()) {
+            char a = 0, b = 0;
+            ifs.get(a);
+            ifs.get(b);
+            if (a == '#' && b == '!') {
+                return ""; // execute directly via shebang
+            }
+        }
+    }
+
     std::string extension = Utils::getFileExtension(scriptPath);
-    
+
     if (extension == "php") return "/usr/bin/php-cgi";
     if (extension == "py") return "/usr/bin/python3";
     if (extension == "pl") return "/usr/bin/perl";
     if (extension == "rb") return "/usr/bin/ruby";
+    if (extension == "sh") return "/bin/sh";
     if (extension == "bla" && !_cgiPath.empty()) return _cgiPath;
-    
+
     return ""; // No interpreter needed, execute directly
 }
 
@@ -489,13 +618,14 @@ void CGI::_cleanup() {
         
         // Try to kill the entire process group first (negative PID)
         kill(-_pid, SIGTERM);  // Try graceful termination first
-    // Replace usleep with poll timeout (allowed API)
-    poll(NULL, 0, 100);
+        // Do not block here. Attempt to reap the child without waiting.
+        // The main loop will continue to monitor and reap if needed.
         if (_isRunning) {
             kill(-_pid, SIGKILL);  // Force kill the process group
             kill(_pid, SIGKILL);   // Also force kill the specific process
         }
-        waitpid(_pid, NULL, 0);  // Reap the zombie process
+        // Reap if already exited (non-blocking)
+        waitpid(_pid, NULL, WNOHANG);
         _isRunning = false;
         _pid = -1;
     }

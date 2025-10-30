@@ -2,6 +2,8 @@
 #include "Server.hpp"
 #include "Logger.hpp"
 #include "Utils.hpp"
+#include "CGI.hpp"
+#include <vector>
 
 void printUsage(const char* programName) {
     std::cout << "Usage: " << programName << " [configuration_file]" << std::endl;
@@ -29,6 +31,29 @@ int main(int argc, char* argv[]) {
         Logger::info("=== Webserv HTTP Server ===");
         Logger::info("Version: 1.0");
         Logger::info("Configuration file: " + configFile);
+
+        // Startup check: resolve interpreter paths for common script extensions
+        {
+            CGI tmpCgi; // use getCgiInterpreter helper
+            std::vector<std::string> exts;
+            exts.push_back("php");
+            exts.push_back("py");
+            exts.push_back("pl");
+            exts.push_back("rb");
+            exts.push_back("sh");
+            exts.push_back("bla");
+            for (size_t i = 0; i < exts.size(); ++i) {
+                const std::string& e = exts[i];
+                std::string dummy = std::string("dummy.") + e;
+                std::string interp = tmpCgi.getCgiInterpreter(dummy);
+                if (interp.empty()) {
+                    Logger::info(std::string("Interpreter for .") + e + " => (execute directly / shebang or no interpreter)");
+                } else {
+                    bool found = Utils::fileExists(interp);
+                    Logger::info(std::string("Interpreter for .") + e + " => " + interp + (found ? " (found)" : " (MISSING)"));
+                }
+            }
+        }
         
         // Create and start server
         Server server(configFile);

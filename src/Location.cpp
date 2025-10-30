@@ -116,6 +116,15 @@ std::string Location::getFullPath(const std::string& uri) const {
     }
 
     // Join root and relative
+    // Special-case: if the relative part is just "/" (exact location match)
+    // and the configured root is itself a file, return the file path directly
+    // (this handles locations configured to map to a single script file).
+    if (relative == "/") {
+        if (!Utils::isDirectory(_root) && Utils::fileExists(_root)) {
+            return _root;
+        }
+    }
+
     std::string fullPath = _root;
     bool needSlash = (!_root.empty() && _root[_root.length() - 1] != '/' &&
                       !relative.empty() && relative[0] != '/');
@@ -129,10 +138,16 @@ std::string Location::getFullPath(const std::string& uri) const {
 }
 
 bool Location::isCgiRequest(const std::string& uri) const {
+    // Treat any request under /cgi-bin as a CGI request regardless of extension.
+    if (_path == "/cgi-bin") {
+        // Ensure the URI starts with the location path (matches rules in matches())
+        if (uri.compare(0, _path.size(), _path) == 0) return true;
+    }
+
     if (_cgiExtension.empty()) {
         return false;
     }
-    
+
     std::string extension = Utils::getFileExtension(uri);
     return extension == _cgiExtension;
 }
