@@ -48,6 +48,9 @@ public:
     // Static session management
     static Session* getSession(const std::string& sessionId);
     static Session* createSession();
+    // Create a session using a pre-existing sessionId (e.g. provided by CGI via Set-Cookie)
+    // Returns pointer to the created or existing session, or NULL on invalid id
+    static Session* createSessionWithId(const std::string& sessionId);
     static void destroySession(const std::string& sessionId);
     static void cleanupExpiredSessions();
     static size_t getSessionCount();

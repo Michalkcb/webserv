@@ -110,6 +110,28 @@ Session* Session::createSession() {
     return &_sessions[sessionId];
 }
 
+// Create a session with an explicit id. This is used when a trusted
+// component (e.g. CGI login script) has issued a Set-Cookie and the
+// server should register the session id in its store.
+Session* Session::createSessionWithId(const std::string& sessionId) {
+    if (sessionId.empty() || sessionId.length() < 8) return NULL;
+    // Basic validation: allow alnum and underscore and hyphen
+    for (size_t i = 0; i < sessionId.length(); ++i) {
+        char c = sessionId[i];
+        if (!( (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_' || c == '-' ))
+            return NULL;
+    }
+
+    // If session already exists and is valid, return it
+    Session* existing = getSession(sessionId);
+    if (existing) return existing;
+
+    Session s(sessionId);
+    _sessions[sessionId] = s;
+    Logger::debug("Created session with explicit id: " + sessionId);
+    return &_sessions[sessionId];
+}
+
 void Session::destroySession(const std::string& sessionId) {
     std::map<std::string, Session>::iterator it = _sessions.find(sessionId);
     if (it != _sessions.end()) {

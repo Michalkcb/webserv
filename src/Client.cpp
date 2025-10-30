@@ -571,6 +571,17 @@ void Client::processRequest(const class Config& config) {
             std::string sid;
             if (cookies.find("SESSIONID") != cookies.end()) sid = cookies["SESSIONID"];
 
+            // If client presented a SESSIONID cookie but the server has no
+            // corresponding session, register it (this allows CGI-created
+            // cookies to be recognized by server-side session store).
+            if (!sid.empty()) {
+                Session* s = Session::getSession(sid);
+                if (!s) {
+                    // createSessionWithId validates format and returns NULL on failure
+                    Session::createSessionWithId(sid);
+                }
+            }
+
             if (path == "/session/create") {
                 Session* s = Session::createSession();
                 Cookie sessionCookie = s->createSessionCookie();
