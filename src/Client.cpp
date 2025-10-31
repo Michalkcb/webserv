@@ -802,9 +802,49 @@ Response Client::_handlePostRequest(const Config::ServerBlock& serverConfig, con
             filename = "upload_" + Utils::intToString(time(NULL));
         }
         
+        // If request is multipart/form-data, try to extract first file part
+        std::string contentType = _request.getHeader("content-type");
+        std::string actualFilename;
+        std::string actualFileContent;
+        if (Utils::toLowerCase(contentType).find("multipart/form-data") != std::string::npos) {
+            if (Utils::parseMultipart(_request.getBody(), contentType, actualFilename, actualFileContent)) {
+                if (!actualFilename.empty()) {
+                    filename = actualFilename;
+                }
+            }
+        }
+
         std::string fullPath = uploadPath + "/" + filename;
-        
-        if (Utils::writeFile(fullPath, _request.getBody())) {
+
+        const std::string& dataToWrite = actualFileContent.empty() ? _request.getBody() : actualFileContent;
+
+        if (Utils::writeFile(fullPath, dataToWrite)) {
+            // After successfully writing the uploaded file, update an index
+            // JSON file in the upload directory so web UI can display current files.
+            std::vector<std::string> dirFiles = Utils::getDirectoryListing(uploadPath);
+            std::ostringstream jsOut;
+            jsOut << "[";
+            bool first = true;
+            for (size_t i = 0; i < dirFiles.size(); ++i) {
+                std::string name = dirFiles[i];
+                if (name == "uploads.json" || name == "index.html") continue;
+                // simple JSON string escape for backslash and quote
+                std::string esc;
+                for (size_t k = 0; k < name.size(); ++k) {
+                    char c = name[k];
+                    if (c == '\\' || c == '"') esc.push_back('\\');
+                    esc.push_back(c);
+                }
+                if (!first) jsOut << ",";
+                jsOut << '"' << esc << '"';
+                first = false;
+            }
+            jsOut << "]";
+            std::string jsonPath = uploadPath;
+            if (!jsonPath.empty() && jsonPath[jsonPath.length()-1] != '/') jsonPath += '/';
+            jsonPath += "uploads.json";
+            Utils::writeFile(jsonPath, jsOut.str());
+
             Response response(HTTP_CREATED);
             response.setHeader("Content-Type", "text/plain");
             response.setBody("File uploaded successfully");

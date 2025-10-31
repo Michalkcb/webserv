@@ -19,6 +19,9 @@ public:
     static bool isDirectory(const std::string& path);
     static std::string getFileExtension(const std::string& filename);
     static std::string getMimeType(const std::string& extension);
+    // Simple multipart/form-data parser: extracts first file field named 'file'
+    // Returns true on success and fills outFilename and outFileContent.
+    static bool parseMultipart(const std::string& body, const std::string& contentTypeHeader, std::string& outFilename, std::string& outFileContent);
     static std::string getStatusMessage(int statusCode);
     static std::string readFile(const std::string& filename);
     static bool writeFile(const std::string& filename, const std::string& content);

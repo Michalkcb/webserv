@@ -187,6 +187,72 @@ std::string Utils::getMimeType(const std::string& extension) {
     return "application/octet-stream";
 }
 
+bool Utils::parseMultipart(const std::string& body, const std::string& contentTypeHeader, std::string& outFilename, std::string& outFileContent) {
+    // Very small, permissive multipart parser. Not a complete implementation.
+    // Expects Content-Type: multipart/form-data; boundary=----bound
+    size_t bpos = contentTypeHeader.find("boundary=");
+    if (bpos == std::string::npos) return false;
+    std::string boundary = contentTypeHeader.substr(bpos + 9);
+    // strip possible quotes
+    if (!boundary.empty() && boundary[0] == '"' && boundary[boundary.size()-1] == '"') boundary = boundary.substr(1, boundary.size()-2);
+    if (boundary.empty()) return false;
+    std::string marker = "--" + boundary;
+
+    size_t cur = 0;
+    while (true) {
+        size_t partStart = body.find(marker, cur);
+        if (partStart == std::string::npos) break;
+        partStart += marker.size();
+        // consume optional CRLF
+        if (partStart + 2 <= body.size() && body[partStart] == '\r' && body[partStart+1] == '\n') partStart += 2;
+
+        // find end of headers
+        size_t headersEnd = body.find("\r\n\r\n", partStart);
+        if (headersEnd == std::string::npos) break;
+        std::string headers = body.substr(partStart, headersEnd - partStart);
+        // find disposition
+        size_t disp = headers.find("Content-Disposition:");
+        if (disp == std::string::npos) { cur = headersEnd + 4; continue; }
+        std::string dispLine;
+        size_t lineEnd = headers.find('\n', disp);
+        if (lineEnd == std::string::npos) dispLine = headers.substr(disp);
+        else dispLine = headers.substr(disp, lineEnd - disp);
+
+        // look for filename
+        size_t fnamePos = dispLine.find("filename=");
+        std::string filename;
+        if (fnamePos != std::string::npos) {
+            size_t qstart = dispLine.find('"', fnamePos);
+            if (qstart != std::string::npos) {
+                size_t qend = dispLine.find('"', qstart+1);
+                if (qend != std::string::npos) filename = dispLine.substr(qstart+1, qend-qstart-1);
+                else filename = dispLine.substr(qstart+1);
+            } else {
+                // unquoted
+                size_t sp = dispLine.find(' ', fnamePos);
+                filename = dispLine.substr(fnamePos+9, (sp==std::string::npos? std::string::npos : sp - (fnamePos+9)));
+            }
+        }
+
+        // find next boundary to get part body
+        size_t nextBoundary = body.find(marker, headersEnd + 4);
+        if (nextBoundary == std::string::npos) break;
+        size_t partBodyStart = headersEnd + 4;
+        size_t partBodyEnd = nextBoundary;
+        // trim trailing CRLF
+        if (partBodyEnd >= 2 && body[partBodyEnd-2] == '\r' && body[partBodyEnd-1] == '\n') partBodyEnd -= 2;
+
+        if (!filename.empty()) {
+            outFilename = filename;
+            outFileContent = body.substr(partBodyStart, partBodyEnd - partBodyStart);
+            return true;
+        }
+
+        cur = nextBoundary;
+    }
+    return false;
+}
+
 std::string Utils::getStatusMessage(int statusCode) {
     switch (statusCode) {
         case 200: return "OK";

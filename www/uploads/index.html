@@ -16,12 +16,59 @@
   <h1>File Upload</h1>
   <p class="note">Upload endpoint as configured in the server config. This demo form uses POST to submit a file.</p>
 
-  <form action="/upload" method="post" enctype="multipart/form-data">
+  <form id="uploadForm" action="/upload" method="post" enctype="multipart/form-data">
     <label for="file">Choose a file:</label>
     <input id="file" name="file" type="file" />
     <button type="submit">Upload</button>
   </form>
+  <div id="uploadResult" style="margin-top:12px; color:#064; font-weight:600;"></div>
+  <p style="margin-top:12px;"><a href="/" style="text-decoration:none;"><button type="button">← Back to Home</button></a></p>
+  <script>
+    // Use fetch to POST the file and keep the user on this page for confirmation
+    document.getElementById('uploadForm').addEventListener('submit', function(e){
+      e.preventDefault();
+      var input = document.getElementById('file');
+      var resultEl = document.getElementById('uploadResult');
+      resultEl.textContent = '';
+      if (!input.files || input.files.length === 0) {
+        resultEl.style.color = '#a00'; resultEl.textContent = 'Select a file first';
+        return;
+      }
+      var file = input.files[0];
+      var name = encodeURIComponent(file.name);
+      var url = '/upload/' + name;
 
-  <p><a href="/">← Back to Home</a></p>
+      var fd = new FormData();
+      fd.append('file', file);
+
+      fetch(url, { method: 'POST', body: fd, credentials: 'same-origin' })
+        .then(function(res){
+          return res.text().then(function(text){ return {status: res.status, text: text}; });
+        }).then(function(obj){
+          if (obj.status >= 200 && obj.status < 300) {
+            resultEl.style.color = '#064';
+            resultEl.textContent = 'Upload OK: ' + obj.status + ' — server replied: ' + obj.text;
+            // refresh uploads list if present
+            fetch('/uploads/uploads.json', {cache:'no-store'}).then(function(r){ if (!r.ok) return []; return r.json(); }).then(function(list){
+              // attempt to render list in-case page has listing UI
+              var ul = document.getElementById('uploadsItems');
+              if (ul) {
+                ul.innerHTML = '';
+                if (!list || list.length === 0) ul.innerHTML = '<li>(no files)</li>';
+                else list.forEach(function(f){ var li = document.createElement('li'); var a = document.createElement('a'); a.href = '/uploads/' + encodeURIComponent(f); a.textContent = f; li.appendChild(a); ul.appendChild(li); });
+                document.getElementById('uploadsList').style.display = 'block';
+              }
+            }).catch(function(){ });
+          } else {
+            resultEl.style.color = '#a00';
+            resultEl.textContent = 'Upload failed: ' + obj.status + ' — server replied: ' + obj.text;
+          }
+        }).catch(function(err){
+          resultEl.style.color = '#a00';
+          resultEl.textContent = 'Upload error: ' + err;
+        });
+    });
+  </script>
+
 </body>
 </html>
