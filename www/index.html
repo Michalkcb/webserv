@@ -366,17 +366,40 @@
                 } catch(e) { console.error('run-shell handler', e); }
             });
         }
-        var runPyBtn = document.getElementById('run-py-btn');
-        if (runPyBtn) {
-            runPyBtn.addEventListener('click', function(){
-                try {
-                    if (perfUrlEl) perfUrlEl.value = '/cgi-bin/hello.py';
-                    if (effectMethodEl) effectMethodEl.value = 'GET';
-                    updatePostBodyUI();
-                    document.getElementById('perf-run').click();
-                } catch(e) { console.error('run-py handler', e); }
-            });
-        }
+                var runPyBtn = document.getElementById('run-py-btn');
+                if (runPyBtn) {
+                        runPyBtn.addEventListener('click', function(){
+                                try {
+                                        // Perform a POST fetch directly to the CGI script so the server
+                                        // executes the Python script (server executes .py on POST in this config).
+                                        var progressEl = document.getElementById('perf-progress');
+                                        var detailsEl = document.getElementById('perf-effect-details');
+                                        progressEl.textContent = 'Sending POST /cgi-bin/hello.py...';
+                                        // Use the existing nowMs() helper to measure duration
+                                        var t0 = nowMs();
+                                        fetch('/cgi-bin/hello.py', { method: 'POST', credentials: 'same-origin' })
+                                            .then(function(res){
+                                                var t1 = nowMs();
+                                                var dur = t1 - t0;
+                                                return res.text().then(function(bodyText){
+                                                    var headersText = '';
+                                                    res.headers.forEach(function(v,k){ headersText += k + ': ' + v + '\n'; });
+                                                    var out = '';
+                                                    out += 'Status: ' + res.status + ' ' + res.statusText + '\n';
+                                                    out += 'Duration: ' + (dur/1000).toFixed(3) + ' s\n';
+                                                    out += '\nResponse Headers:\n' + headersText + '\n';
+                                                    out += '\nResponse Body (truncated):\n' + (bodyText.length > 2000 ? bodyText.substring(0,2000) + '\n... (truncated)' : bodyText) + '\n';
+                                                    detailsEl.textContent = out;
+                                                    detailsEl.style.display = 'block';
+                                                    progressEl.textContent = 'Completed: ' + res.status + ' in ' + (dur/1000).toFixed(3) + 's';
+                                                });
+                                            }).catch(function(err){
+                                                progressEl.textContent = 'Error: ' + err;
+                                                console.error('run-py handler error', err);
+                                            });
+                                } catch(e) { console.error('run-py handler', e); }
+                        });
+                }
     })();
     </script>
 </body>
