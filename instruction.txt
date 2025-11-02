@@ -29,7 +29,7 @@ cp ubuntu_cgi_tester www/cgi-bin/cgi_test && chmod +x www/cgi-bin/cgi_test
 
 make
 
-./webserv tester_config.conf &
+cle
 
 sleep 2 && ps aux | grep webserv | grep -v grep
 
