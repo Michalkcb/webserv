@@ -730,10 +730,57 @@ Response Client::_handleGetRequest(const Config::ServerBlock& serverConfig, cons
     std::string uriPath = _request.getPath();
     std::string fullPath = location ? location->getFullPath(uriPath) : (Config::getRoot(serverConfig) + uriPath);
 
-    // Note: Even if the location is configured for CGI on certain extensions,
-    // GET requests can legitimately serve the underlying file as static content
-    // unless explicitly disallowed. CGI execution for .bla is handled for POST
-    // earlier in processRequest; for GET we fall through to static file logic.
+    // If this location is a CGI location, execute the CGI for GET/HEAD
+    // requests instead of serving the script source as a static file.
+    // This implements the expected behaviour from the subject: requests
+    // to /cgi-bin/... should invoke the CGI and return its output.
+    if (location && location->isCgiRequest(_request.getUri())) {
+        std::string resolved = location->getFullPath(uriPath);
+        if (!Utils::fileExists(resolved)) {
+            return Response::createErrorResponse(HTTP_NOT_FOUND);
+        }
+
+        CGI cgi(location->getCgiPath());
+        if (!cgi.execute(_request, resolved)) {
+            return Response::createErrorResponse(HTTP_INTERNAL_SERVER_ERROR);
+        }
+
+        // Read all CGI output. The CGI pipes are non-blocking; if read() would
+        // block, wait for the child to exit and retry. This captures the full
+        // stdout produced by the CGI and converts it to a Response.
+        std::string cgiOut;
+        char buf[BUFFER_SIZE];
+        for (;;) {
+            ssize_t n = cgi.readFromOutput(buf, sizeof(buf));
+            if (n > 0) {
+                cgiOut.append(buf, n);
+                continue;
+            }
+            if (n == 0) {
+                // EOF
+                break;
+            }
+            // n < 0: check if temporarily unavailable
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                // Block until CGI process exits, then retry reading remaining data
+                cgi.waitForCompletion();
+                continue;
+            }
+            // Other read error: abort and return 500
+            Logger::error(std::string("Error reading CGI output: ") + strerror(errno));
+            return Response::createErrorResponse(HTTP_INTERNAL_SERVER_ERROR);
+        }
+
+        Response resp = cgi.generateResponse(cgiOut);
+        // Respect keep-alive semantics from the request
+        bool isHttp11 = (_request.getVersion() == "HTTP/1.1");
+        std::string conn = Utils::toLowerCase(_request.getHeader("connection"));
+        _keepAlive = isHttp11 ? (conn != "close") : (conn == "keep-alive");
+        resp.setHeader("Connection", _keepAlive ? "keep-alive" : "close");
+        if (_keepAlive) resp.setHeader("Keep-Alive", "timeout=600, max=100");
+        resp.setComplete(true);
+        return resp;
+    }
 
     if (Utils::isDirectory(fullPath)) {
         // Try index

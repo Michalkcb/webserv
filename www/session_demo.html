@@ -4,20 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Session Demo — Webserv</title>
-  <style>
-    body { font-family: Arial, Helvetica, sans-serif; max-width:900px; margin:30px auto; padding:20px; }
-    .card { background:#fff;padding:18px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.06); }
-    h1 { margin-top:0 }
-    .controls { margin:12px 0; }
-    input[type=text] { padding:6px 8px;border:1px solid #ccc;border-radius:4px }
-    button { margin-left:8px;padding:8px 12px;border-radius:6px;border:0;background:#007bff;color:#fff;cursor:pointer }
-    button.secondary { background:#6c757d }
-    pre { background:#f7f7f9;padding:10px;border-radius:6px;white-space:pre-wrap }
-    .row { display:flex; gap:10px; align-items:center; margin:8px 0 }
-    label { min-width:80px }
-  </style>
+  <link rel="stylesheet" href="/static/google-style.css">
 </head>
 <body>
+  <div class="top-right"><a class="btn secondary" href="/">home</a></div>
   <div class="card">
     <h1>Session Demo</h1>
     <p>This page demonstrates the server-side session endpoints. It will call the following endpoints on the same origin:</p>
@@ -58,7 +48,7 @@
       <pre id="resp-out">(none)</pre>
 
     </div>
-    <p style="margin-top:14px;font-size:0.9em;color:#666">Note: the demo uses fetch(..., {credentials: 'include'}) so the browser sends/receives cookies from the server on the same origin.</p>
+  <p class="muted">Note: the demo uses fetch(..., {credentials: 'include'}) so the browser sends/receives cookies from the server on the same origin.</p>
     <p><a href="/">← Back to index</a></p>
   </div>
 

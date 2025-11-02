@@ -3,14 +3,10 @@
 <head>
   <meta charset="utf-8">
   <title>Upload file</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 2rem; }
-    .progress { width: 100%; max-width: 600px; height: 20px; background: #eee; border-radius: 4px; overflow: hidden; }
-    .progress > div { height: 100%; background: #4caf50; width: 0%; transition: width 0.2s; }
-    #result { margin-top: 1rem; }
-  </style>
-</head>
+  <link rel="stylesheet" href="/static/google-style.css">
+  </head>
 <body>
+  <div class="top-right"><a class="btn secondary" href="/">home</a></div>
   <h1>Upload File</h1>
   <form id="uploadForm" action="/upload" method="post" enctype="multipart/form-data">
     <label>
@@ -21,12 +17,12 @@
     <button type="submit">Upload</button>
   </form>
 
-  <div class="progress" id="progress" style="display:none;"><div></div></div>
+  <div class="progress hidden" id="progress"><div></div></div>
   <div id="result">
     <p id="summary"></p>
-    <pre id="requestInfo" style="background:#f6f6f6;padding:8px;border-radius:4px;display:none;"></pre>
-    <pre id="serverResponse" style="background:#f0f8ff;padding:8px;border-radius:4px;display:none;"></pre>
-    <div id="uploadsList" style="margin-top:1rem;display:none;">
+  <pre id="requestInfo" class="http-body hidden"></pre>
+  <pre id="serverResponse" class="http-body hidden"></pre>
+  <div id="uploadsList" class="uploads-list hidden">
       <h3>Uploads folder</h3>
       <ul id="uploadsItems"></ul>
     </div>
