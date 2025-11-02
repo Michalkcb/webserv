@@ -3,11 +3,24 @@
 #include "Logger.hpp"
 #include <fstream>
 #include <ctime>
+#include <sstream>
 #include <fcntl.h>
 #include <netinet/tcp.h>
 #include <netdb.h>
 
 Server* Server::instance = NULL;
+
+// Small helper: write a single line to finalize_cgi_debug.log only when
+// diagnostics are explicitly enabled via WEBSERV_ENABLE_DIAG=1. This
+// mirrors the gated logging helpers in Client.cpp so the server does not
+// unconditionally create debug files during normal runs or evaluation.
+static void serverDiagFinalLog(const std::string& s) {
+    const char* dbg = getenv("WEBSERV_ENABLE_DIAG");
+    if (!dbg || dbg[0] != '1') return;
+    std::ofstream f("finalize_cgi_debug.log", std::ios::app);
+    if (!f.is_open()) return;
+    f << s;
+}
 
 Server::Server() : _running(false) {
     instance = this;
@@ -106,9 +119,10 @@ void Server::run() {
                 // already been finalized. This avoids duplicates where the
                 // POLLIN path already finalized the CGI earlier in the same
                 // loop iteration.
-                if (client->getCgi() && !client->isCgiFinalized()) {
-                    std::ofstream d("finalize_cgi_debug.log", std::ios::app);
-                    d << "PROCESS_QUEUE finalize client=" << (void*)client << " fd=" << client->getFd() << " ts=" << (unsigned long)time(NULL)*1000UL << "\n";
+                    if (client->getCgi() && !client->isCgiFinalized()) {
+                    std::ostringstream ss;
+                    ss << "PROCESS_QUEUE finalize client=" << (void*)client << " fd=" << client->getFd() << " ts=" << (unsigned long)time(NULL)*1000UL << "\n";
+                    serverDiagFinalLog(ss.str());
                     client->finalizeCgiResponse();
                 }
                 client->clearCgiFinalizeRequest();
@@ -193,13 +207,24 @@ void Server::_handlePollEvents() {
             if (revents & (POLLHUP | POLLERR)) {
                 client->markPeerClosed();
                 Logger::debug("Poll revents on client fd=" + Utils::intToString(client->getFd()) + ": HUP/ERR. sendBufferLen=" + Utils::intToString((int)client->getSendBuffer().length()));
+                // On HUP/ERR prefer to flush any pending send buffer once.
                 if ((revents & POLLOUT) && !client->getSendBuffer().empty()) client->sendData();
                 if (client->getSendBuffer().empty()) client->setState(Client::FINISHED);
             } else {
-                if (revents & POLLOUT) client->sendData();
-                if (revents & POLLIN) {
+                // Subject requirement: only one read OR one write per client per poll()
+                // If both POLLIN and POLLOUT are set, perform a single operation to
+                // satisfy the evaluation constraint. We prefer to perform receive
+                // first (to progress request parsing) and skip the send in that
+                // iteration. This keeps behaviour deterministic and simple.
+                bool didOne = false;
+                if ((revents & POLLIN) && !didOne) {
                     client->receiveData();
                     client->processRequest(_config);
+                    didOne = true;
+                }
+                if ((revents & POLLOUT) && !didOne) {
+                    client->sendData();
+                    didOne = true;
                 }
             }
             if (client->getState() == Client::FINISHED || client->getState() == Client::ERROR_STATE)
@@ -508,9 +533,10 @@ void Server::_checkCgiCompletion() {
                         } else {
                 Logger::debug("FINALIZE_CALLSITE:server_check client_fd=" + Utils::intToString(client->getFd()));
                                     {
-                                        std::ofstream d("finalize_cgi_debug.log", std::ios::app);
+                                        std::ostringstream ss;
                                         unsigned long ts = (unsigned long)time(NULL) * 1000UL;
-                                        d << "CALLSITE:server_check ts=" << ts << " client_socket=" << client->getFd() << " client_ptr=" << (void*)client << "\n";
+                                        ss << "CALLSITE:server_check ts=" << ts << " client_socket=" << client->getFd() << " client_ptr=" << (void*)client << "\n";
+                                        serverDiagFinalLog(ss.str());
                                     }
                                     // Defer to the centralized finalizer instead of finalizing here.
                                     client->requestCgiFinalize();

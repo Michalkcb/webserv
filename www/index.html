@@ -18,6 +18,7 @@
       <div class="row">
     <a class="btn" href="/static/index.html">Static files</a>
   <a class="btn success" href="/uploads/">Uploads</a>
+  <a class="btn" href="/session_demo.html">Session demo</a>
   <a class="btn warn" href="/nonexistent">Trigger 404</a>
   <a class="btn danger" href="/error_pages/500.html">500 example</a>
       </div>
@@ -27,8 +28,9 @@
   <h2 class="h1">CGI — quick preview</h2>
   <p class="h2">Click the buttons to perform requests to CGI scripts. The response (headers + body) will be shown below.</p>
   <div class="row mb">
-        <button class="btn" data-url="/cgi-bin/hello.py" data-method="GET">GET /cgi-bin/hello.py</button>
-        <button class="btn" data-url="/static/login.html" data-method="GET">Open login form</button>
+  <button class="btn" data-url="/cgi-bin/hello.py" data-method="GET">GET /cgi-bin/hello.py</button>
+  <button class="btn" data-url="/cgi-bin/hello.php" data-method="GET">GET /cgi-bin/hello.php (PHP)</button>
+  <button class="btn" data-url="/static/login.html" data-method="GET">Open login form</button>
   <form id="login-post" method="post" action="/cgi-bin/login.py" class="inline">
           <input type="hidden" name="username" value="demo">
           <input type="hidden" name="password" value="secret">
@@ -50,10 +52,13 @@
         <li class="kv">Server web root: <code>./www</code></li>
         <li class="kv">Sessions: the demo uses cookie <code>SESSIONID</code></li>
         <li class="kv">If a CGI returns an empty body for 405 it is intentional (safer for the client)</li>
+  <li class="kv">PHP CGI demo: <a href="/cgi-bin/hello.php">/cgi-bin/hello.php</a> (requires PHP CGI configured in <code>config/default.conf</code>)</li>
+  <li class="kv">Session demo: <a href="/session_demo.html">/session_demo.html</a> — demo pokazuje przypisanie identyfikatora sesji (cookie <code>SESSIONID</code>), odczyt/zapis wartości w sesji oraz zniszczenie sesji. Wszystkie karty/przeglądarki używają tej samej sesji dopóki cookie nie zostanie usunięte.</li>
+  <li class="kv">Uwagi bezpieczeństwa: obecny mechanizm nadaje i przechowuje identyfikator sesji po stronie klienta. To wystarcza dla demonstracji i testów, ale w środowisku produkcyjnym warto rozważyć: regenerację ID po uwierzytelnieniu, flagi Secure/HttpOnly/SameSite, wygasanie sesji, ograniczenia (IP/UA) z rozwagą, oraz CSRF tokeny. Dla izolacji "per-tab" można użyć sessionStorage lub dodatkowego tokenu per-tab przekazywanego w nagłówku.</li>
       </ul>
     </section>
 
-  <footer class="footer">Webserv 1.0 — simple HTTP server / C++98 <br> copyright mbany ltomasze jkalinow
+  <footer class="footer">Webserv 1.0 — simple HTTP server / C++98 <br> © copyright: mbany ltomasze jkalinow
 
 
   </footer>

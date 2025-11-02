@@ -39,6 +39,16 @@ static bool findHeaderBodySeparator(const std::string& buf, size_t& header_end_p
     return false;
 }
 
+// Small helper: write a single line to finalize_cgi_debug.log only when
+// diagnostics are explicitly enabled via WEBSERV_ENABLE_DIAG=1.
+static void diagFinalLog(const std::string& s) {
+    const char* dbg = getenv("WEBSERV_ENABLE_DIAG");
+    if (!dbg || dbg[0] != '1') return;
+    std::ofstream f("finalize_cgi_debug.log", std::ios::app);
+    if (!f.is_open()) return;
+    f << s;
+}
+
 static const size_t CGI_WRITE_BUFFER_LIMIT = 256 * 1024U;
 
 // Helper: current time in milliseconds since epoch (for diagnostics)
@@ -92,12 +102,16 @@ Client& Client::operator=(const Client& other) {
 
 // Lifecycle logging for debugging duplicate finalization and accidental copies
 static void appendLifecycleLog(const std::string& line) {
+    const char* dbg = getenv("WEBSERV_ENABLE_DIAG");
+    if (!dbg || dbg[0] != '1') return;
     std::ofstream lf("cgi_lifecycle.log", std::ios::app);
     lf << line << "\n";
 }
 
 // Registry audit helper: record whenever ownership is inserted/erased or conflicts occur.
 static void appendRegistryAudit(const std::string& action, CGI* cgi, void* owner) {
+    const char* dbg = getenv("WEBSERV_ENABLE_DIAG");
+    if (!dbg || dbg[0] != '1') return;
     std::ofstream rf("registry_audit.log", std::ios::app);
     if (!rf.is_open()) return;
     rf << action << " ts=" << nowMs() << " cgi_ptr=" << (void*)cgi << " owner=" << owner;
@@ -110,6 +124,8 @@ static void appendRegistryAudit(const std::string& action, CGI* cgi, void* owner
 // Allocation-site audit: record where each CGI object was created. This helps
 // deterministically identify which callsite allocated a given alloc id / pointer.
 static void appendAllocationAudit(CGI* cgi, void* owner) {
+    const char* dbg = getenv("WEBSERV_ENABLE_DIAG");
+    if (!dbg || dbg[0] != '1') return;
     std::ofstream af("allocation_audit.log", std::ios::app);
     if (!af.is_open()) return;
     af << "ALLOC ts=" << nowMs() << " cgi_ptr=" << (void*)cgi << " owner=" << owner;
@@ -132,6 +148,8 @@ static void appendAllocationAudit(CGI* cgi, void* owner) {
 // visible even if allocation_audit.log cannot be found for any reason.
 static void appendAllocationAuditMirror(CGI* cgi, void* owner) {
 #ifndef NDEBUG
+    const char* dbg_env = getenv("WEBSERV_ENABLE_DIAG");
+    if (!dbg_env || dbg_env[0] != '1') return;
     void* btbuf[32];
     int bt_size = backtrace(btbuf, 32);
     char** bt_syms = backtrace_symbols(btbuf, bt_size);
@@ -166,8 +184,10 @@ Client::~Client() {
                 g_cgi_owner_registry.erase(regit);
                 delete _cgi; _cgi = NULL;
             } else {
-                std::ofstream dbg("finalize_cgi_debug.log", std::ios::app);
-                dbg << "WARNING: DTOR encountered _cgi ptr owned by other client. this=" << (void*)this << " other_owner=" << regit->second << " cgi_ptr=" << (void*)_cgi << "\n";
+                {
+                    std::ostringstream _oss; _oss << "WARNING: DTOR encountered _cgi ptr owned by other client. this=" << (void*)this << " other_owner=" << regit->second << " cgi_ptr=" << (void*)_cgi << "\n";
+                    diagFinalLog(_oss.str());
+                }
                 appendRegistryAudit("REG_DROP_REF", _cgi, (void*)this);
                 // Drop our reference but do not delete (other owner will clean up)
                 _cgi = NULL;
@@ -208,8 +228,10 @@ bool Client::setCgi(CGI* cgi) {
                 g_cgi_owner_registry.erase(regit);
                 delete _cgi;
             } else {
-                std::ofstream dbg("finalize_cgi_debug.log", std::ios::app);
-                dbg << "WARNING: setCgi replacing _cgi ptr owned by other client. this=" << (void*)this << " other_owner=" << regit->second << " cgi_ptr=" << (void*)_cgi << "\n";
+                {
+                    std::ostringstream _oss; _oss << "WARNING: setCgi replacing _cgi ptr owned by other client. this=" << (void*)this << " other_owner=" << regit->second << " cgi_ptr=" << (void*)_cgi << "\n";
+                    diagFinalLog(_oss.str());
+                }
                 appendRegistryAudit("REG_CONFLICT_REPLACE", _cgi, (void*)this);
                 Logger::error("setCgi: attempted to replace CGI pointer owned by another Client — possible ownership bug");
                 // Drop our reference only
@@ -230,8 +252,10 @@ bool Client::setCgi(CGI* cgi) {
             // Conflict: someone else already owns this CGI pointer. Do not
             // overwrite ownership. Delete the newly-created CGI (caller will
             // treat this as failure) and record audit.
-            std::ofstream dbg("finalize_cgi_debug.log", std::ios::app);
-            dbg << "ERROR: setCgi conflict: cgi_ptr=" << (void*)_cgi << " existing_owner=" << pit->second << " new_owner=" << (void*)this << "\n";
+            {
+                std::ostringstream _oss; _oss << "ERROR: setCgi conflict: cgi_ptr=" << (void*)_cgi << " existing_owner=" << pit->second << " new_owner=" << (void*)this << "\n";
+                diagFinalLog(_oss.str());
+            }
             appendRegistryAudit("REG_CONFLICT_ASSIGN", _cgi, (void*)this);
             // In debug builds, capture a short backtrace to help find the
             // callsite that created the conflicting CGI object.
@@ -240,10 +264,12 @@ bool Client::setCgi(CGI* cgi) {
             int bt_size = backtrace(btbuf, 32);
             char** bt_syms = backtrace_symbols(btbuf, bt_size);
             if (bt_syms) {
-                dbg << "Backtrace (most recent call first):\n";
+                std::ostringstream _bt;
+                _bt << "Backtrace (most recent call first):\n";
                 for (int i = 0; i < bt_size; ++i) {
-                    dbg << "  " << bt_syms[i] << "\n";
+                    _bt << "  " << bt_syms[i] << "\n";
                 }
+                diagFinalLog(_bt.str());
                 free(bt_syms);
             }
 #endif
@@ -760,15 +786,10 @@ Response Client::_handleGetRequest(const Config::ServerBlock& serverConfig, cons
                 // EOF
                 break;
             }
-            // n < 0: check if temporarily unavailable
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                // Block until CGI process exits, then retry reading remaining data
-                cgi.waitForCompletion();
-                continue;
-            }
-            // Other read error: abort and return 500
-            Logger::error(std::string("Error reading CGI output: ") + strerror(errno));
-            return Response::createErrorResponse(HTTP_INTERNAL_SERVER_ERROR);
+            // n < 0: do not inspect errno (evaluation rule). Wait for CGI
+            // completion and retry reading remaining data.
+            cgi.waitForCompletion();
+            continue;
         }
 
         Response resp = cgi.generateResponse(cgiOut);
@@ -1084,8 +1105,8 @@ void Client::handleCgiOutput() {
                         // We've already received the entire declared body; request centralized finalize.
                         Logger::debug("FINALIZE_CALLSITE:streaming_headers this=" + Utils::intToString((int)(long)this) + " fd=" + Utils::intToString(_fd));
                         {
-                            std::ofstream d("finalize_cgi_debug.log", std::ios::app);
-                            d << "CALLSITE:streaming_headers ts=" << nowMs() << " client=" << _clientNumber << " fd=" << _fd << "\n";
+                            std::ostringstream _oss; _oss << "CALLSITE:streaming_headers ts=" << nowMs() << " client=" << _clientNumber << " fd=" << _fd << "\n";
+                            diagFinalLog(_oss.str());
                         }
                         requestCgiFinalize();
                         return;
@@ -1110,8 +1131,8 @@ void Client::handleCgiOutput() {
                         // We've delivered exactly the declared number of bytes. Request centralized finalize.
                         Logger::debug("FINALIZE_CALLSITE:streaming_body this=" + Utils::intToString((int)(long)this) + " fd=" + Utils::intToString(_fd));
                         {
-                            std::ofstream d("finalize_cgi_debug.log", std::ios::app);
-                            d << "CALLSITE:streaming_body ts=" << nowMs() << " client=" << _clientNumber << " fd=" << _fd << "\n";
+                            std::ostringstream _oss; _oss << "CALLSITE:streaming_body ts=" << nowMs() << " client=" << _clientNumber << " fd=" << _fd << "\n";
+                            diagFinalLog(_oss.str());
                         }
                         requestCgiFinalize();
                         return;
@@ -1135,8 +1156,8 @@ void Client::handleCgiOutput() {
             // Didn't finish parsing headers – finalize with what we have
             Logger::debug("FINALIZE_CALLSITE:EOF_processing this=" + Utils::intToString((int)(long)this) + " fd=" + Utils::intToString(_fd));
             {
-                std::ofstream d("finalize_cgi_debug.log", std::ios::app);
-                d << "CALLSITE:EOF_processing ts=" << nowMs() << " client=" << _clientNumber << " fd=" << _fd << "\n";
+                std::ostringstream _oss; _oss << "CALLSITE:EOF_processing ts=" << nowMs() << " client=" << _clientNumber << " fd=" << _fd << "\n";
+                diagFinalLog(_oss.str());
             }
             requestCgiFinalize();
             return;
@@ -1151,8 +1172,8 @@ void Client::handleCgiOutput() {
                 // We deferred sending (no Content-Length). Build full response now.
                 Logger::debug("FINALIZE_CALLSITE:EOF_streaming_body this=" + Utils::intToString((int)(long)this) + " fd=" + Utils::intToString(_fd));
                 {
-                    std::ofstream d("finalize_cgi_debug.log", std::ios::app);
-                    d << "CALLSITE:EOF_streaming_body ts=" << nowMs() << " client=" << _clientNumber << " fd=" << _fd << "\n";
+                    std::ostringstream _oss; _oss << "CALLSITE:EOF_streaming_body ts=" << nowMs() << " client=" << _clientNumber << " fd=" << _fd << "\n";
+                    diagFinalLog(_oss.str());
                 }
                 requestCgiFinalize();
             }
@@ -1210,13 +1231,16 @@ void Client::finalizeCgiResponse() {
     // are reused or when multiple Client objects point to the same CGI.
     static std::map<int, void*> s_pid_finalizers;
     // Debug log stream used by the duplicate-detection logic below.
-    std::ofstream dbg("finalize_cgi_debug.log", std::ios::app);
+    // Use diagFinalLog(...) to perform gated diagnostic writes.
     int cgi_pid = _cgi ? _cgi->getPid() : -1;
     if (cgi_pid != -1) {
         std::map<int, void*>::iterator pit = s_pid_finalizers.find(cgi_pid);
         if (pit != s_pid_finalizers.end() && pit->second != (void*)this) {
             // Another Client already finalized this CGI pid
-            dbg << "DUPLICATE_FINALIZE_PID pid=" << cgi_pid << " first_this=" << pit->second << " new_this=" << (void*)this << " client=" << _clientNumber << " cgi_out_len=" << (int)_cgiOutputBuffer.length() << "\n";
+            {
+                std::ostringstream _oss; _oss << "DUPLICATE_FINALIZE_PID pid=" << cgi_pid << " first_this=" << pit->second << " new_this=" << (void*)this << " client=" << _clientNumber << " cgi_out_len=" << (int)_cgiOutputBuffer.length() << "\n";
+                diagFinalLog(_oss.str());
+            }
             Logger::error("DUPLICATE finalizeCgiResponse detected for cgi pid=");
         }
         s_pid_finalizers[cgi_pid] = (void*)this;
@@ -1234,12 +1258,13 @@ void Client::finalizeCgiResponse() {
     // was reused or it's a different execution and shouldn't be treated
     // as a duplicate.
     if (first_exec == cgi_exec_id && first_this != (void*)this) {
-            dbg << "DUPLICATE_FINALIZE cgi_ptr=" << cgi_ptr
+            std::ostringstream _oss; _oss << "DUPLICATE_FINALIZE cgi_ptr=" << cgi_ptr
                 << " first_this=" << first_this << " first_client=" << first_client
                 << " first_exec=" << first_exec
                 << " new_this=" << (void*)this << " new_client=" << _clientNumber
                 << " new_fd=" << _fd << " cgi_out_len=" << (int)_cgiOutputBuffer.length()
                 << " new_exec=" << cgi_exec_id << " owner=" << owner << "\n";
+            diagFinalLog(_oss.str());
             Logger::error("DUPLICATE finalizeCgiResponse detected for cgi_ptr=");
         }
     }
@@ -1247,8 +1272,11 @@ void Client::finalizeCgiResponse() {
     s_finalizers[cgi_ptr] = std::make_pair((void*)this, std::make_pair(_clientNumber, cgi_exec_id));
 
     // Diagnostic entry for the actual finalize event
-    dbg << "Entered finalizeCgiResponse client=" << _clientNumber << " this=" << (void*)this << " fd=" << _fd
-        << " cgi_ptr=" << cgi_ptr << " cgi_out_len=" << (int)_cgiOutputBuffer.length() << "\n";
+    {
+        std::ostringstream _oss; _oss << "Entered finalizeCgiResponse client=" << _clientNumber << " this=" << (void*)this << " fd=" << _fd
+            << " cgi_ptr=" << cgi_ptr << " cgi_out_len=" << (int)_cgiOutputBuffer.length() << "\n";
+        diagFinalLog(_oss.str());
+    }
     bool preserved = false;
 
     // Attempt a one-time non-blocking drain of the CGI output fd into the
