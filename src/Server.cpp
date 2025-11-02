@@ -15,11 +15,9 @@ Server* Server::instance = NULL;
 // mirrors the gated logging helpers in Client.cpp so the server does not
 // unconditionally create debug files during normal runs or evaluation.
 static void serverDiagFinalLog(const std::string& s) {
-    const char* dbg = getenv("WEBSERV_ENABLE_DIAG");
-    if (!dbg || dbg[0] != '1') return;
-    std::ofstream f("finalize_cgi_debug.log", std::ios::app);
-    if (!f.is_open()) return;
-    f << s;
+    (void)s;
+    // finalize_cgi_debug.log disabled: do not create or write this file.
+    return;
 }
 
 Server::Server() : _running(false) {

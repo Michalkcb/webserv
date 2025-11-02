@@ -25,12 +25,11 @@ CGI::CGI(const std::string& cgiPath) : _cgiPath(cgiPath), _pid(-1), _inputFd(-1)
 // Owner management
 void CGI::setOwner(void* owner) {
     _owner = owner;
-    // Registry audit: record when owner is set
-    std::ofstream rf("registry_audit.log", std::ios::app);
-    if (rf.is_open()) {
-        rf << "SET_OWNER ts=" << (unsigned long)time(NULL)*1000UL << " cgi_ptr=" << (void*)this << " owner=" << owner
-           << " pid=" << _pid << " exec=" << _execId << " alloc=" << _allocId << "\n";
-    }
+    // Registry audit disabled: emit to Logger instead of creating a file.
+    std::ostringstream ss;
+    ss << "SET_OWNER ts=" << (unsigned long)time(NULL)*1000UL << " cgi_ptr=" << (void*)this << " owner=" << owner
+       << " pid=" << _pid << " exec=" << _execId << " alloc=" << _allocId;
+    Logger::debug(ss.str());
 }
 
 void* CGI::getOwner() const {
@@ -77,12 +76,10 @@ void CGI::markFinalized() {
 
 // Add a small helper to dump env when debugging
 static void dumpCgiEnv(pid_t pid, const std::map<std::string,std::string>& env) {
-    std::string path = std::string("/tmp/ws_cgi_env_") + Utils::intToString((int)pid) + ".txt";
-    std::ofstream ofs(path.c_str());
-    if (!ofs.is_open()) return;
-    for (std::map<std::string,std::string>::const_iterator it = env.begin(); it != env.end(); ++it) {
-        ofs << it->first << "=" << it->second << "\n";
-    }
+    // Disabled: avoid creating per-CGI env dumps on disk. Emit a short debug line instead.
+    std::ostringstream ss;
+    ss << "CGI_ENV_DUMP_DISABLED pid=" << pid << " vars=" << env.size();
+    Logger::debug(ss.str());
 }
 
 void CGI::_setupEnvironment(const Request& request) {
@@ -193,28 +190,9 @@ bool CGI::execute(const Request& request, const std::string& scriptPath) {
         // from the child are captured for debugging instead of being discarded.
         {
             // Use time-based suffix (or /dev/urandom) instead of getpid() to avoid using getpid()
-            std::string suffix;
-            int urd = open("/dev/urandom", O_RDONLY);
-            if (urd != -1) {
-                unsigned int v = 0;
-                if (read(urd, &v, sizeof(v)) == (ssize_t)sizeof(v)) {
-                    std::ostringstream s; s << v;
-                    suffix = s.str();
-                }
-                close(urd);
-            }
-            if (suffix.empty()) {
-                suffix = Utils::intToString((int)time(NULL));
-            }
-            std::string errPath = std::string("/tmp/ws_cgi_err_") + suffix + std::string(".log");
-            int errfd = open(errPath.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
-            if (errfd != -1) {
-                dup2(errfd, STDERR_FILENO);
-                close(errfd);
-            } else {
-                int devnull = open("/dev/null", O_WRONLY);
-                if (devnull != -1) { dup2(devnull, STDERR_FILENO); close(devnull); }
-            }
+            // Diagnostic file creation for CGI stderr disabled: redirect to /dev/null
+            int devnull = open("/dev/null", O_WRONLY);
+            if (devnull != -1) { dup2(devnull, STDERR_FILENO); close(devnull); }
         }
 
         // Set correct working directory for CGI (subject requirement):

@@ -42,11 +42,9 @@ static bool findHeaderBodySeparator(const std::string& buf, size_t& header_end_p
 // Small helper: write a single line to finalize_cgi_debug.log only when
 // diagnostics are explicitly enabled via WEBSERV_ENABLE_DIAG=1.
 static void diagFinalLog(const std::string& s) {
-    const char* dbg = getenv("WEBSERV_ENABLE_DIAG");
-    if (!dbg || dbg[0] != '1') return;
-    std::ofstream f("finalize_cgi_debug.log", std::ios::app);
-    if (!f.is_open()) return;
-    f << s;
+    (void)s;
+    // finalize_cgi_debug.log disabled: do not create or write this file.
+    return;
 }
 
 static const size_t CGI_WRITE_BUFFER_LIMIT = 256 * 1024U;
@@ -104,21 +102,18 @@ Client& Client::operator=(const Client& other) {
 static void appendLifecycleLog(const std::string& line) {
     const char* dbg = getenv("WEBSERV_ENABLE_DIAG");
     if (!dbg || dbg[0] != '1') return;
-    std::ofstream lf("cgi_lifecycle.log", std::ios::app);
-    lf << line << "\n";
+    // Diagnostics: send to Logger instead of creating files on disk.
+    Logger::debug(std::string("LIFECYCLE: ") + line);
 }
 
 // Registry audit helper: record whenever ownership is inserted/erased or conflicts occur.
 static void appendRegistryAudit(const std::string& action, CGI* cgi, void* owner) {
     const char* dbg = getenv("WEBSERV_ENABLE_DIAG");
     if (!dbg || dbg[0] != '1') return;
-    std::ofstream rf("registry_audit.log", std::ios::app);
-    if (!rf.is_open()) return;
-    rf << action << " ts=" << nowMs() << " cgi_ptr=" << (void*)cgi << " owner=" << owner;
-    if (cgi) {
-        rf << " pid=" << cgi->getPid() << " exec=" << cgi->getExecId() << " alloc=" << cgi->getAllocId();
-    }
-    rf << "\n";
+    std::ostringstream ss;
+    ss << action << " ts=" << nowMs() << " cgi_ptr=" << (void*)cgi << " owner=" << owner;
+    if (cgi) ss << " pid=" << cgi->getPid() << " exec=" << cgi->getExecId() << " alloc=" << cgi->getAllocId();
+    Logger::debug(ss.str());
 }
 
 // Allocation-site audit: record where each CGI object was created. This helps
@@ -126,19 +121,23 @@ static void appendRegistryAudit(const std::string& action, CGI* cgi, void* owner
 static void appendAllocationAudit(CGI* cgi, void* owner) {
     const char* dbg = getenv("WEBSERV_ENABLE_DIAG");
     if (!dbg || dbg[0] != '1') return;
-    std::ofstream af("allocation_audit.log", std::ios::app);
-    if (!af.is_open()) return;
-    af << "ALLOC ts=" << nowMs() << " cgi_ptr=" << (void*)cgi << " owner=" << owner;
-    if (cgi) af << " alloc=" << cgi->getAllocId() << " exec=" << cgi->getExecId() << " pid=" << cgi->getPid();
-    af << "\n";
+    std::ostringstream ss;
+    ss << "ALLOC ts=" << nowMs() << " cgi_ptr=" << (void*)cgi << " owner=" << owner;
+    if (cgi) ss << " alloc=" << cgi->getAllocId() << " exec=" << cgi->getExecId() << " pid=" << cgi->getPid();
+    Logger::debug(ss.str());
 #ifndef NDEBUG
-    // Capture a compact backtrace at allocation time in debug builds
+    // Capture a compact backtrace at allocation time in debug builds and
+    // emit it via Logger rather than writing to a file.
     void* btbuf[32];
     int bt_size = backtrace(btbuf, 32);
     char** bt_syms = backtrace_symbols(btbuf, bt_size);
     if (bt_syms) {
-        af << "Backtrace (alloc site):\n";
-        for (int i = 0; i < bt_size; ++i) af << "  " << bt_syms[i] << "\n";
+        std::ostringstream _bt;
+        _bt << "Backtrace (alloc site):";
+        for (int i = 0; i < bt_size; ++i) {
+            _bt << "\n  " << bt_syms[i];
+        }
+        Logger::debug(_bt.str());
         free(bt_syms);
     }
 #endif
@@ -147,23 +146,8 @@ static void appendAllocationAudit(CGI* cgi, void* owner) {
 // Also mirror allocation backtraces into finalize_cgi_debug.log so they are
 // visible even if allocation_audit.log cannot be found for any reason.
 static void appendAllocationAuditMirror(CGI* cgi, void* owner) {
-#ifndef NDEBUG
-    const char* dbg_env = getenv("WEBSERV_ENABLE_DIAG");
-    if (!dbg_env || dbg_env[0] != '1') return;
-    void* btbuf[32];
-    int bt_size = backtrace(btbuf, 32);
-    char** bt_syms = backtrace_symbols(btbuf, bt_size);
-    std::ofstream dbg("finalize_cgi_debug.log", std::ios::app);
-    if (!dbg.is_open()) return;
-    dbg << "ALLOC_MIRROR ts=" << nowMs() << " cgi_ptr=" << (void*)cgi << " owner=" << owner;
-    if (cgi) dbg << " alloc=" << cgi->getAllocId() << " exec=" << cgi->getExecId() << " pid=" << cgi->getPid();
-    dbg << "\n";
-    if (bt_syms) {
-        dbg << "Backtrace (alloc site mirror):\n";
-        for (int i = 0; i < bt_size; ++i) dbg << "  " << bt_syms[i] << "\n";
-        free(bt_syms);
-    }
-#endif
+    (void)cgi; (void)owner;
+    // Mirror intentionally disabled: do not write to finalize_cgi_debug.log
 }
 
 
@@ -1203,9 +1187,8 @@ void Client::finalizeCgiResponse() {
     // multiple Client objects hold pointers to the same CGI.
     void* owner = _cgi->getOwner();
     if (owner != NULL && owner != (void*)this) {
-        std::ofstream dbg("finalize_cgi_debug.log", std::ios::app);
-        dbg << "SKIP_FINALIZE_NOT_OWNER cgi_ptr=" << (void*)_cgi << " owner=" << owner << " this=" << (void*)this << " client=" << _clientNumber << "\n";
-        Logger::debug("finalizeCgiResponse: skipping finalize because this Client is not the CGI owner");
+        std::ostringstream _oss; _oss << "SKIP_FINALIZE_NOT_OWNER cgi_ptr=" << (void*)_cgi << " owner=" << owner << " this=" << (void*)this << " client=" << _clientNumber;
+        Logger::debug(_oss.str());
         return;
     }
     // Mark as finalized immediately to prevent re-entrancy/log duplication
@@ -1296,15 +1279,9 @@ void Client::finalizeCgiResponse() {
     // finalization. This is a temporary debug aid and can be removed once
     // the issue is diagnosed.
     {
-        std::string dbgPath = std::string("/tmp/ws_dbg_cgiout_") + Utils::intToString(_clientNumber) + std::string("_") + Utils::intToString((int)time(NULL)) + std::string(".bin");
-        std::ofstream dbgOf(dbgPath.c_str(), std::ios::binary | std::ios::trunc);
-        if (dbgOf.is_open()) {
-            dbgOf.write(_cgiOutputBuffer.c_str(), (std::streamsize)_cgiOutputBuffer.size());
-            dbgOf.close();
-            Logger::debug(std::string("Wrote CGI debug dump to ") + dbgPath);
-        } else {
-            Logger::debug(std::string("Failed to open CGI debug dump file: ") + dbgPath);
-        }
+        // Disabled: do not write CGI output dumps to /tmp. Log summary instead.
+        Logger::debug(std::string("CGI debug dump disabled; buffer_len=") + Utils::intToString((int)_cgiOutputBuffer.size()) +
+                      " client=" + Utils::intToString(_clientNumber));
     }
 
     // If we've already sent CGI headers (streaming mode), do NOT construct or
@@ -1537,8 +1514,8 @@ void Client::close() {
 
 void Client::requestCgiFinalize() {
     _cgiFinalizeRequested = true;
-    std::ofstream d("finalize_cgi_debug.log", std::ios::app);
-    d << "REQUEST_FINALIZE client=" << _clientNumber << " this=" << (void*)this << " fd=" << _fd << " ts=" << nowMs() << "\n";
+    std::ostringstream _oss; _oss << "REQUEST_FINALIZE client=" << _clientNumber << " this=" << (void*)this << " fd=" << _fd << " ts=" << nowMs();
+    Logger::debug(_oss.str());
 }
 
 bool Client::isCgiFinalizeRequested() const {

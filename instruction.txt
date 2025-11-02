@@ -31,6 +31,8 @@ make
 
 cle
 
+./webserv tester_config.conf &
+
 sleep 2 && ps aux | grep webserv | grep -v grep
 
 echo "http://127.0.0.1:8080" | ./ubuntu_tester

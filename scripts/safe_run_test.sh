@@ -78,7 +78,6 @@ sleep 2
 # Run tester
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 TEST_LOG="$OUT_DIR/tester_run_${TIMESTAMP}.log"
-FINALIZE_LOG="$ROOT_DIR/finalize_cgi_debug.log"
 LIFECYCLE_LOG="$ROOT_DIR/cgi_lifecycle.log"
 
 echo "Running tester. Output -> $TEST_LOG"
@@ -94,17 +93,11 @@ fi
 sleep 1
 
 # Copy/rotate logs for inspection
-if [ -f "$FINALIZE_LOG" ]; then
-  cp "$FINALIZE_LOG" "$OUT_DIR/finalize_cgi_debug_${TIMESTAMP}.log"
-  echo "Copied finalize log -> $OUT_DIR/finalize_cgi_debug_${TIMESTAMP}.log"
-else
-  echo "No finalize_cgi_debug.log found. It will be created when webserv runs." 
-fi
 if [ -f "$LIFECYCLE_LOG" ]; then
   cp "$LIFECYCLE_LOG" "$OUT_DIR/cgi_lifecycle_${TIMESTAMP}.log"
   echo "Copied lifecycle log -> $OUT_DIR/cgi_lifecycle_${TIMESTAMP}.log"
 else
-  echo "No cgi_lifecycle.log found yet." 
+  echo "No cgi_lifecycle.log found (diagnostic logging disabled)." 
 fi
 
 # Stop webserv that we started (best-effort)
@@ -130,8 +123,8 @@ fi
 echo "Safe run complete. Logs are in: $OUT_DIR"
 
 # Helpful hint for user to send logs
-echo "When you have logs ready, please attach these two files to the issue/analysis:"
-echo "  $OUT_DIR/finalize_cgi_debug_${TIMESTAMP}.log"
-echo "  $OUT_DIR/cgi_lifecycle_${TIMESTAMP}.log"
+echo "When you have logs ready, please attach any relevant tester output in:"
+echo "  $TEST_LOG"
+echo "(Diagnostic file logging is disabled by default; enable WEBSERV_ENABLE_DIAG=1 if you need lifecycle traces.)"
 
 exit 0
