@@ -30,7 +30,7 @@
   <div class="row mb">
   <button class="btn" data-url="/cgi-bin/hello.py" data-method="GET">GET /cgi-bin/hello.py</button>
   <button class="btn" data-url="/cgi-bin/hello.php" data-method="GET">GET /cgi-bin/hello.php (PHP)</button>
-  <button class="btn" data-url="/static/login.html" data-method="GET">Open login form</button>
+  <a class="btn" href="/static/login.html">Open login form</a>
   <form id="login-post" method="post" action="/cgi-bin/login.py" class="inline">
           <input type="hidden" name="username" value="demo">
           <input type="hidden" name="password" value="secret">
@@ -73,7 +73,7 @@
       try {
         const opts = { method: method };
         const res = await fetch(url, opts);
-  // headers
+        // headers
         let headersText = '';
         res.headers.forEach((v,k)=> headersText += k + ': ' + v + '\n');
         setText('http-headers', 'Status: ' + res.status + ' ' + res.statusText + '\n' + headersText);
@@ -98,6 +98,30 @@
         fetchAndShow(url, method);
       });
     });
+
+    // Intercept the login form (#login-post) and POST via fetch so both login controls behave the same.
+    var loginForm = document.getElementById('login-post');
+    if (loginForm){
+      loginForm.addEventListener('submit', function(ev){
+        ev.preventDefault();
+        var formData = new FormData(loginForm);
+        fetch(loginForm.action, {
+          method: 'POST',
+          body: formData,
+          credentials: 'same-origin'
+        }).then(function(res){
+          // on success, navigate to the session demo so the user sees their SESSIONID cookie
+          if (res.ok) {
+            window.location.href = '/session_demo.html';
+          } else {
+            // fallback: reload the response body into the preview area
+            res.text().then(function(text){ document.getElementById('http-body').textContent = text; });
+          }
+        }).catch(function(err){
+          document.getElementById('http-headers').textContent = 'Error: ' + err;
+        });
+      });
+    }
   })();
   </script>
 </body>
