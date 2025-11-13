@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Uploads</title>
+  <link rel="stylesheet" href="/static/google-style.css">
+</head>
+<body>
+  <div class="top-right"><a class="btn secondary" href="/">home</a></div>
+  <main class="container">
+    <section class="card">
+      <h1 class="h1">Uploads</h1>
+      <p class="h2">Upload a new file or view files in <code>/uploads/</code></p>
+
+      <form id="uploadForm" action="/upload" method="post" enctype="multipart/form-data">
+        <label for="fileInput">Choose file</label><br>
+        <input id="fileInput" name="file" type="file"><br>
+        <div style="margin-top:12px;"><button class="btn" type="submit">Upload</button></div>
+      </form>
+
+      <div class="card" style="margin-top:12px;">
+        <div id="uploadResult" class="kv">Status: (none)</div>
+        <div class="progress" id="progress" style="display:none; margin-top:8px;"><div></div></div>
+      </div>
+
+      <h3 style="margin-top:16px;">Files</h3>
+      <div class="uploads-list">
+        <ul id="uploadsItems">
+          <li>testfile.txt</li>
+        </ul>
+      </div>
+  <p style="margin-top:12px;"><a class="btn" href="/">home</a></p>
+    </section>
+  </main>
+
+  <script>
+  (function(){
+    // render list helper
+    function render(list){
+      var ul = document.getElementById('uploadsItems');
+      if (!ul) return;
+      ul.innerHTML = '';
+      if (!list || list.length === 0) { ul.innerHTML = '<li>(no files)</li>'; return; }
+      list.forEach(function(f){ var li = document.createElement('li'); var a = document.createElement('a'); a.href = '/uploads/' + encodeURIComponent(f); a.textContent = f; li.appendChild(a); ul.appendChild(li); });
+    }
+
+    // try JSON index first, fallback to directory listing HTML
+    function fetchList(){
+      return fetch('/uploads/uploads.json', {cache:'no-store'}).then(function(res){ if (!res.ok) throw 0; return res.json(); }).then(function(j){ if (j && j.files) return j.files; return j; });
+    }
+
+    fetchList().then(render).catch(function(){
+      // fallback: try parsing HTML directory listing
+      fetch('/uploads/', {cache:'no-store'}).then(function(res){ if (!res.ok) throw 0; return res.text(); }).then(function(html){
+        try{
+          var doc = new DOMParser().parseFromString(html, 'text/html');
+          var anchors = doc.querySelectorAll('a');
+          var files = [];
+          anchors.forEach(function(a){ var href = a.getAttribute('href'); if (!href || href === '../') return; var name = href.replace(/\/$/, ''); if (name.length) files.push(decodeURIComponent(name)); });
+          render(files);
+        }catch(e){ /* ignore */ }
+      }).catch(function(){ /* ignore */ });
+    });
+
+    // upload form handling (XHR with progress)
+    var form = document.getElementById('uploadForm');
+    if (form){
+      form.addEventListener('submit', function(e){
+        e.preventDefault();
+        var input = document.getElementById('fileInput');
+        var resultEl = document.getElementById('uploadResult');
+        var progressBar = document.getElementById('progress');
+        var progressInner = progressBar ? progressBar.querySelector('div') : null;
+  if (!input || !input.files || input.files.length === 0){ resultEl.textContent = 'Please choose a file first'; resultEl.style.color = '#a00'; return; }
+        var file = input.files[0];
+        var fd = new FormData(); fd.append('file', file);
+
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', form.getAttribute('action') || '/upload', true);
+        xhr.upload.onprogress = function(evt){ if (!evt.lengthComputable) return; var pct = Math.round(evt.loaded / evt.total * 100); if (progressBar && progressInner){ progressBar.style.display = 'block'; progressInner.style.width = pct + '%'; } };
+        xhr.onload = function(){
+          if (xhr.status >= 200 && xhr.status < 300){ resultEl.style.color = '#064'; resultEl.textContent = 'Upload OK: ' + xhr.status; }
+          else { resultEl.style.color = '#a00'; resultEl.textContent = 'Upload failed: ' + xhr.status; }
+          if (progressBar && progressInner){ progressInner.style.width = '0%'; progressBar.style.display = 'none'; }
+          // refresh list
+          fetchList().then(render).catch(function(){});
+        };
+        xhr.onerror = function(){ resultEl.style.color = '#a00'; resultEl.textContent = 'Upload error'; if (progressBar) progressBar.style.display = 'none'; };
+        xhr.send(fd);
+        resultEl.textContent = 'Uploading...'; resultEl.style.color = '#000';
+      });
+    }
+  })();
+  </script>
+</body>
+</html>

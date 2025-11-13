@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Login</title>
+  <link rel="stylesheet" href="/static/google-style.css">
+</head>
+<body>
+  <div class="top-right"><a class="btn secondary" href="/">home</a></div>
+  <main class="container">
+    <h1>Login</h1>
+    <form action="/cgi-bin/login.py" method="POST">
+      <div><input type="text" name="username" placeholder="Username" /></div>
+  <div style="margin-top:8px;"><input type="password" name="password" placeholder="Password" /></div>
+  <div style="margin-top:12px;"><input class="btn" type="submit" value="Login" /></div>
+    </form>
+  </main>
+</body>
+</html>

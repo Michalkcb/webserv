@@ -1,0 +1,14 @@
+#!/bin/sh
+# Persist stdin to a predictable tmp file so the server-side tests can inspect what the CGI received.
+TMPFILE="/tmp/youpi_bla.$$"
+cp_stash="/tmp/youpi_stdin.$$"
+
+cat > "$TMPFILE"
+# make a copy with predictable name including pid so we can inspect after the request
+cp "$TMPFILE" "$cp_stash" 2>/dev/null || true
+
+echo "Content-Type: text/plain"
+echo "Content-Length: $(wc -c < "$TMPFILE")"
+echo ""
+
+cat "$TMPFILE"
