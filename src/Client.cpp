@@ -795,6 +795,14 @@ void Client::processRequest(const class Config& config) {
             _response = Response::createErrorResponse(HTTP_NOT_IMPLEMENTED);
         }
 
+        // If an asynchronous CGI was spawned above, we switched the
+        // client state to CGI_PROCESSING/CGI_STREAMING_BODY and must not
+        // serialize/send a response here. The async CGI flow will build
+        // the response later in handleCgiOutput()/finalizeCgiResponse().
+        if (_state == CGI_PROCESSING || _state == CGI_STREAMING_BODY) {
+            return;
+        }
+
         // Bonus features and keep-alive headers
         _applyBonusFeatures();
         {
@@ -856,55 +864,43 @@ Response Client::_handleGetRequest(const Config::ServerBlock& serverConfig, cons
     }
 
     if (location && location->isCgiRequest(_request.getUri())) {
+        // Use asynchronous, poll-driven CGI handling instead of performing
+        // synchronous read loops here. Spawn the CGI and take ownership so
+        // that subsequent poll() iterations will drive reads from the CGI
+        // output fd inside handleCgiOutput(). This avoids performing any
+        // read/write outside of the main event loop (required by eval).
         std::string resolved = location->getFullPath(uriPath);
         if (!Utils::fileExists(resolved)) {
             return Response::createErrorResponse(HTTP_NOT_FOUND);
         }
 
-        CGI cgi(location->getCgiPath());
-        if (!cgi.execute(_request, resolved)) {
+        CGI* c = new CGI(location->getCgiPath());
+        appendAllocationAudit(c, (void*)this);
+        if (!c || !c->execute(_request, resolved)) {
+            if (c) delete c;
             return Response::createErrorResponse(HTTP_INTERNAL_SERVER_ERROR);
         }
 
-        // Read all CGI output. The CGI pipes are non-blocking; if read() would
-        // block, wait for the child to exit and retry. This captures the full
-        // stdout produced by the CGI and converts it to a Response.
-        std::string cgiOut;
-        char buf[BUFFER_SIZE];
-        for (;;) {
-            ssize_t n = cgi.readFromOutput(buf, sizeof(buf));
-            if (n > 0) {
-                cgiOut.append(buf, n);
-                continue;
-            }
-            if (n == 0) {
-                // EOF
-                break;
-            }
-            // n < 0: do not inspect errno (evaluation rule). Wait for CGI
-            // completion and retry reading remaining data.
-            cgi.waitForCompletion();
-            continue;
-        }
-
-        // Ensure we reap the CGI and check its exit status. If the CGI
-        // exited with a non-zero code, treat it as an internal server
-        // error regardless of any stdout produced (prevents scripts that
-        // write headers then crash from returning 200 OK).
-        int cgiExit = cgi.waitForCompletion();
-        if (cgiExit != 0) {
+        // Take ownership via setCgi (sets registry/owner). If setCgi fails,
+        // it will delete the passed-in CGI on conflict; handle that case.
+        if (!setCgi(c)) {
+            // setCgi already deletes c on failure; return 500
             return Response::createErrorResponse(HTTP_INTERNAL_SERVER_ERROR);
         }
 
-        Response resp = cgi.generateResponse(cgiOut);
-        // Respect keep-alive semantics from the request
-        bool isHttp11 = (_request.getVersion() == "HTTP/1.1");
-        std::string conn = Utils::toLowerCase(_request.getHeader("connection"));
-        _keepAlive = isHttp11 ? (conn != "close") : (conn == "keep-alive");
-        resp.setHeader("Connection", _keepAlive ? "keep-alive" : "close");
-        if (_keepAlive) resp.setHeader("Keep-Alive", "timeout=600, max=100");
-        resp.setComplete(true);
-        return resp;
+        // Prepare client state for async CGI processing. No reads/writes now.
+        _cgiWriteBuffer.clear();
+        _cgiInputCopy.clear();
+        _cgiBytesSent = 0;
+        _state = CGI_PROCESSING;
+        updateLastActivity();
+
+        // We return an empty Response here; the caller (processRequest)
+        // will detect that we've switched to CGI_PROCESSING and will skip
+        // serializing/sending a response for now. The actual response will
+        // be constructed later when handleCgiOutput()/finalizeCgiResponse()
+        // detect complete CGI output.
+        return Response();
     }
 
     if (Utils::isDirectory(fullPath)) {
