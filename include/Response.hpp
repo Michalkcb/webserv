@@ -56,6 +56,7 @@ public:
     static Response createRedirectResponse(int statusCode, const std::string& location);
     static Response createFileResponse(const std::string& filename, const std::string& mimeType = "");
     static Response createDirectoryListingResponse(const std::string& path, const std::string& uri);
+    static Response createPlainDirectoryListingResponse(const std::string& path, const std::string& uri);
 
     // Send tracking
     void addBytesSent(size_t bytes);

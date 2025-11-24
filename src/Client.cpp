@@ -23,6 +23,12 @@
 // For debug backtraces when ownership conflicts occur
 #include <execinfo.h>
 
+// CGI idle timeout (seconds): if a CGI process produces no output for
+// this many seconds and the client is idle, the server will finalize
+// the CGI and return an error. Reduce this value to avoid long hangs
+// from buggy/infinite-loop scripts. Tune as needed.
+static const int CGI_IDLE_TIMEOUT = 10;
+
 // Helper: find the end of HTTP-style headers in a buffer.
 // Supports CRLFCRLF ("\r\n\r\n") and LF LF ("\n\n").
 // Returns true if a separator was found. On success, header_end_pos is the
@@ -70,13 +76,19 @@ Client::Client() : _fd(-1), _state(RECEIVING_REQUEST), _cgi(NULL), _cgiBytesSent
                    _keepAlive(false), _cgiFinishedWaitingForRequest(false),
                    _peerClosed(false), _cgiHeadersSent(false),
                    _sent100Continue(false), _cgiBodyRemaining((size_t)-1),
-                   _cgiBodyOffset(0), _clientNumber(++g_clientCounter), _cgiFinalized(false), _cgiFinalizeRequested(false) { }
+                   _cgiBodyOffset(0), _clientNumber(++g_clientCounter), _cgiFinalized(false), _cgiFinalizeRequested(false), _listenerPort(0), _cgiTimeoutSec(10) { }
 
 Client::Client(int fd) : _fd(fd), _state(RECEIVING_REQUEST), _cgi(NULL), _cgiBytesSent(0),
                    _keepAlive(false), _cgiFinishedWaitingForRequest(false),
                    _peerClosed(false), _cgiHeadersSent(false),
                    _sent100Continue(false), _cgiBodyRemaining((size_t)-1),
-                   _cgiBodyOffset(0), _clientNumber(++g_clientCounter), _cgiFinalized(false), _cgiFinalizeRequested(false) { }
+                   _cgiBodyOffset(0), _clientNumber(++g_clientCounter), _cgiFinalized(false), _cgiFinalizeRequested(false), _listenerPort(0), _cgiTimeoutSec(10) { }
+
+Client::Client(int fd, int listenerPort) : _fd(fd), _state(RECEIVING_REQUEST), _cgi(NULL), _cgiBytesSent(0),
+                   _keepAlive(false), _cgiFinishedWaitingForRequest(false),
+                   _peerClosed(false), _cgiHeadersSent(false),
+                   _sent100Continue(false), _cgiBodyRemaining((size_t)-1),
+                   _cgiBodyOffset(0), _clientNumber(++g_clientCounter), _cgiFinalized(false), _cgiFinalizeRequested(false), _listenerPort(listenerPort), _cgiTimeoutSec(10) { }
 
 Client::Client(const Client& other) {
     // Copying Client is forbidden. This stub logs and aborts to make any
@@ -374,12 +386,54 @@ void Client::processRequest(const class Config& config) {
     }
 
     // Identify server and location for routing and policy decisions
-    Config::ServerBlock serverBlock = config.getDefaultServer();
-    const Location* location = NULL;
-    if (!_request.getUri().empty()) {
-        location = config.findLocation(serverBlock, _request.getUri());
+    // Determine effective port from Host header (if present) or the listener port
+    const Config::ServerBlock* serverBlockPtr = NULL;
+    const Config::ServerBlock* defaultServerPtr = NULL;
+    if (config.size() > 0) defaultServerPtr = &config.getServers()[0];
+
+    std::string hostHeader = Utils::trim(_request.getHeader("host"));
+    std::string hostPart;
+    int hostPort = 0;
+    if (!hostHeader.empty()) {
+        size_t colonPos = hostHeader.find(':');
+        if (colonPos != std::string::npos) {
+            hostPart = hostHeader.substr(0, colonPos);
+            std::string portStr = hostHeader.substr(colonPos + 1);
+            hostPort = Utils::stringToInt(portStr);
+        } else {
+            hostPart = hostHeader;
+        }
     }
-    size_t allowedMax = location ? location->getMaxBodySize() : Config::getMaxBodySize(serverBlock);
+
+    int effectivePort = (hostPort > 0) ? hostPort : _listenerPort;
+    // Ask config to find best ServerBlock for this port + server_name
+    serverBlockPtr = config.findServerByPortAndName(effectivePort, Utils::toLowerCase(hostPart));
+    if (!serverBlockPtr) serverBlockPtr = defaultServerPtr;
+
+    const Location* location = NULL;
+    if (serverBlockPtr && !_request.getUri().empty()) {
+        location = config.findLocation(*serverBlockPtr, _request.getUri());
+    }
+    // Determine effective CGI timeout: location overrides server, otherwise server default
+    if (location) {
+        int lt = location->getCgiTimeout();
+        if (lt > 0) _cgiTimeoutSec = lt;
+        else if (serverBlockPtr) _cgiTimeoutSec = serverBlockPtr->cgiTimeoutSeconds;
+    } else if (serverBlockPtr) {
+        _cgiTimeoutSec = serverBlockPtr->cgiTimeoutSeconds;
+    }
+    // Debug: report chosen server and location
+    if (serverBlockPtr) {
+        std::string names;
+        const std::vector<std::string>& sns = Config::getServerNames(*serverBlockPtr);
+        for (size_t i = 0; i < sns.size(); ++i) { if (i) names += ","; names += sns[i]; }
+        std::string locPath = location ? location->getPath() : std::string("(none)");
+        Logger::debug("Routing selection: port=" + Utils::intToString(serverBlockPtr->port) + " server_names='" + names + "' selected_location='" + locPath + "'");
+    }
+    size_t allowedMax = location ? location->getMaxBodySize() : (serverBlockPtr ? Config::getMaxBodySize(*serverBlockPtr) : MAX_BODY_SIZE);
+    // Create a local copy of the chosen server block so existing call sites
+    // that expect a ServerBlock reference can continue to use `serverBlock`.
+    Config::ServerBlock serverBlock = serverBlockPtr ? *serverBlockPtr : Config::ServerBlock();
 
     // Timeout handling for chunked uploads before completion
     if (_request.hasChunkedTimeout(30)) {
@@ -413,6 +467,8 @@ void Client::processRequest(const class Config& config) {
     }
 
     // Early CGI spawn for POST on CGI-mapped locations while body is still streaming
+    // Also spawn CGI for GET requests early so GET will execute the script
+    // instead of being served as a static file.
     if (location && location->isCgiRequest(_request.getUri()) && !_cgi) {
         std::string reqMethod = Utils::toUpperCase(_request.getMethod());
         if (!location->isMethodAllowed(reqMethod)) {
@@ -429,6 +485,39 @@ void Client::processRequest(const class Config& config) {
             if (_keepAlive) _response.setHeader("Keep-Alive", "timeout=600, max=100");
             _sendBuffer = _response.toString();
             _state = SENDING_RESPONSE;
+            return;
+        }
+                // If this is a GET, spawn CGI early so it will be executed rather than
+        // served as a static file. CGI::execute will handle closing stdin for
+        // GET requests if there's no body.
+        if (reqMethod == "GET") {
+            std::string resolvedScriptPath = location ? location->getFullPath(_request.getPath())
+                                                      : _request.getPath();
+
+            CGI* c = new CGI(location->getCgiPath());
+            appendAllocationAudit(c, (void*)this);
+            if (!c || !c->execute(_request, resolvedScriptPath)) {
+                if (c) { delete c; }
+                _response = Response::createErrorResponse(HTTP_INTERNAL_SERVER_ERROR);
+                _sendBuffer = _response.toString();
+                _state = SENDING_RESPONSE;
+                return;
+            }
+
+            if (!setCgi(c)) {
+                _response = Response::createErrorResponse(HTTP_INTERNAL_SERVER_ERROR);
+                _sendBuffer = _response.toString();
+                _state = SENDING_RESPONSE;
+                return;
+            }
+
+            _cgiWriteBuffer.clear();
+            _cgiInputCopy.clear();
+            _cgiBytesSent = 0;
+
+            _state = CGI_PROCESSING;
+            updateLastActivity();
+            // No body to write for GET; return and let CGI handling continue
             return;
         }
     if (reqMethod == "POST") {
@@ -566,7 +655,8 @@ void Client::processRequest(const class Config& config) {
 
         // Redirects
         if (location && !location->getRedirect().empty()) {
-            _response = Response::createRedirectResponse(HTTP_FOUND, location->getRedirect());
+            int status = location->getRedirectStatus();
+            _response = Response::createRedirectResponse(status, location->getRedirect());
             _sendBuffer = _response.toString();
             _state = SENDING_RESPONSE;
             return;
@@ -649,15 +739,25 @@ void Client::processRequest(const class Config& config) {
                 }
                 Session* s = NULL;
                 if (sid.empty()) {
+                    // No session id provided: create a fresh server-side session
                     s = Session::createSession();
                     Cookie sessionCookie = s->createSessionCookie();
                     _response.addCookie(sessionCookie);
                 } else {
+                    // Try to find existing session; if not present, attempt to
+                    // create one using the provided explicit id. This allows
+                    // trusted components (like CGI login scripts) to issue a
+                    // session id and have the server register it via
+                    // Session::createSessionWithId(). If that fails, fall back
+                    // to creating a new server-generated session.
                     s = Session::getSession(sid);
                     if (!s) {
-                        s = Session::createSession();
-                        Cookie sessionCookie = s->createSessionCookie();
-                        _response.addCookie(sessionCookie);
+                        s = Session::createSessionWithId(sid);
+                        if (!s) {
+                            s = Session::createSession();
+                            Cookie sessionCookie = s->createSessionCookie();
+                            _response.addCookie(sessionCookie);
+                        }
                     }
                 }
                 s->set(key, value);
@@ -739,11 +839,22 @@ size_t Client::_stageBodyChunkForCgi(size_t maxBytes) {
 Response Client::_handleGetRequest(const Config::ServerBlock& serverConfig, const Location* location) {
     std::string uriPath = _request.getPath();
     std::string fullPath = location ? location->getFullPath(uriPath) : (Config::getRoot(serverConfig) + uriPath);
+    // Debug: log computed path components to help diagnose missing-file/permission issues
+    {
+        std::string srvRoot = Config::getRoot(serverConfig);
+        std::string locRoot = location ? location->getRoot() : std::string("(none)");
+        Logger::debug("Routing debug: uri='" + uriPath + "' serverRoot='" + srvRoot + "' locationRoot='" + locRoot + "' fullPath='" + fullPath + "'");
+    }
 
     // If this location is a CGI location, execute the CGI for GET/HEAD
     // requests instead of serving the script source as a static file.
     // This implements the expected behaviour from the subject: requests
     // to /cgi-bin/... should invoke the CGI and return its output.
+    // Enforce `deny all;` at the start of handling
+    if (location && location->getDenyAll()) {
+        return Response::createErrorResponse(HTTP_FORBIDDEN);
+    }
+
     if (location && location->isCgiRequest(_request.getUri())) {
         std::string resolved = location->getFullPath(uriPath);
         if (!Utils::fileExists(resolved)) {
@@ -776,6 +887,15 @@ Response Client::_handleGetRequest(const Config::ServerBlock& serverConfig, cons
             continue;
         }
 
+        // Ensure we reap the CGI and check its exit status. If the CGI
+        // exited with a non-zero code, treat it as an internal server
+        // error regardless of any stdout produced (prevents scripts that
+        // write headers then crash from returning 200 OK).
+        int cgiExit = cgi.waitForCompletion();
+        if (cgiExit != 0) {
+            return Response::createErrorResponse(HTTP_INTERNAL_SERVER_ERROR);
+        }
+
         Response resp = cgi.generateResponse(cgiOut);
         // Respect keep-alive semantics from the request
         bool isHttp11 = (_request.getVersion() == "HTTP/1.1");
@@ -801,13 +921,49 @@ Response Client::_handleGetRequest(const Config::ServerBlock& serverConfig, cons
         // Autoindex
         bool autoindex = location ? location->getAutoindex() : false;
         if (autoindex) {
+            // If client prefers plain text (Accept: text/plain), return a
+            // simple newline-separated listing. Otherwise, return the HTML
+            // directory index as before.
+            std::string accept = Utils::toLowerCase(_request.getHeader("accept"));
+            if (!accept.empty() && accept.find("text/plain") != std::string::npos) {
+                return Response::createPlainDirectoryListingResponse(fullPath, uriPath);
+            }
             return Response::createDirectoryListingResponse(fullPath, uriPath);
         }
         // No index and no autoindex -> Not Found per tester expectations
+        // If server configured a custom error page for 404, resolve it and use it.
+        const std::map<int, std::string>& eps = Config::getErrorPages(serverConfig);
+        std::map<int, std::string>::const_iterator epit = eps.find(HTTP_NOT_FOUND);
+        if (epit != eps.end()) {
+            std::string ep = epit->second;
+            std::string epPath;
+            if (!ep.empty() && ep[0] == '/') {
+                std::string root = Config::getRoot(serverConfig);
+                if (!root.empty() && root[root.size()-1] == '/') root.erase(root.size()-1);
+                epPath = root + ep; // ep begins with '/'
+            } else {
+                epPath = ep; // treat as filesystem path
+            }
+            return Response::createErrorResponse(HTTP_NOT_FOUND, epPath);
+        }
         return Response::createErrorResponse(HTTP_NOT_FOUND);
     }
 
     if (!Utils::fileExists(fullPath)) {
+        const std::map<int, std::string>& eps = Config::getErrorPages(serverConfig);
+        std::map<int, std::string>::const_iterator epit = eps.find(HTTP_NOT_FOUND);
+        if (epit != eps.end()) {
+            std::string ep = epit->second;
+            std::string epPath;
+            if (!ep.empty() && ep[0] == '/') {
+                std::string root = Config::getRoot(serverConfig);
+                if (!root.empty() && root[root.size()-1] == '/') root.erase(root.size()-1);
+                epPath = root + ep;
+            } else {
+                epPath = ep;
+            }
+            return Response::createErrorResponse(HTTP_NOT_FOUND, epPath);
+        }
         return Response::createErrorResponse(HTTP_NOT_FOUND);
     }
     std::string mime = Utils::getMimeType(Utils::getFileExtension(fullPath));
@@ -837,6 +993,9 @@ Response Client::_handlePostRequest(const Config::ServerBlock& serverConfig, con
 
     // Handle CGI-mapped POST fallback: if target script/file doesn't exist, return 404
     if (location && location->isCgiRequest(_request.getUri())) {
+        if (location && location->getDenyAll()) {
+            return Response::createErrorResponse(HTTP_FORBIDDEN);
+        }
         std::string resolved = location->getFullPath(path);
         if (!Utils::fileExists(resolved)) {
             return Response::createErrorResponse(HTTP_NOT_FOUND);
@@ -847,6 +1006,9 @@ Response Client::_handlePostRequest(const Config::ServerBlock& serverConfig, con
     
     // Handle file upload
     if (location && !location->getUploadPath().empty()) {
+        if (location && location->getDenyAll()) {
+            return Response::createErrorResponse(HTTP_FORBIDDEN);
+        }
         std::string uploadPath = location->getUploadPath();
         std::string filename = path.substr(path.find_last_of('/') + 1);
         
@@ -939,6 +1101,10 @@ Response Client::_handlePutRequest(const Config::ServerBlock& serverConfig, cons
     } else {
         fullPath = Config::getRoot(serverConfig) + path;
     }
+    // Enforce `deny all;` for PUT
+    if (location && location->getDenyAll()) {
+        return Response::createErrorResponse(HTTP_FORBIDDEN);
+    }
     
     // For testing purposes, handle PUT requests to create/update files
     if (path.find("put_test") != std::string::npos) {
@@ -964,6 +1130,11 @@ Response Client::_handleDeleteRequest(const Config::ServerBlock& serverConfig, c
         fullPath = location->getFullPath(path);
     } else {
         fullPath = Config::getRoot(serverConfig) + path;
+    }
+
+    // Enforce `deny all;` for DELETE
+    if (location && location->getDenyAll()) {
+        return Response::createErrorResponse(HTTP_FORBIDDEN);
     }
     
     if (Utils::fileExists(fullPath)) {
@@ -1319,15 +1490,40 @@ void Client::finalizeCgiResponse() {
         }
     }
 
-    // Align CGI timeout with server-side check (uses 600s) to avoid
-    // prematurely treating long-running uploads as timed out here.
-    if (_cgi->hasTimedOut(600)) {
+    // Align CGI timeout with configured value to avoid prematurely
+    // treating long-running uploads as timed out here.
+    if (_cgi->hasTimedOut(_cgiTimeoutSec)) {
         _cgi->terminate();
         _response = Response::createErrorResponse(HTTP_REQUEST_TIMEOUT);
     } else {
         // Drop binary dump to /tmp to comply with allowed API set
 
         Logger::debug("Finalizing CGI with buffer length (CPP714): " + Utils::intToString((int)_cgiOutputBuffer.length()));
+
+        // Reap the CGI and check its exit status. If the CGI exited
+        // with a non-zero status, return 500 Internal Server Error
+        // rather than any partial stdout it may have emitted.
+        int cgiExit = _cgi->waitForCompletion();
+        if (cgiExit != 0) {
+            Logger::debug("CGI exited with non-zero status: " + Utils::intToString(cgiExit));
+            _response = Response::createErrorResponse(HTTP_INTERNAL_SERVER_ERROR);
+            _response.setComplete(true);
+            // cleanup CGI object below (common cleanup path)
+            if (_cgi) {
+                std::map<void*, void*>::iterator regit = g_cgi_owner_registry.find((void*)_cgi);
+                if (regit != g_cgi_owner_registry.end() && regit->second == (void*)this) {
+                    g_cgi_owner_registry.erase(regit);
+                }
+                delete _cgi;
+                _cgi = NULL;
+            }
+            _cgiFinalized = true;
+            _sendBuffer = _response.toString();
+            _cgiOutputBuffer.clear();
+            _state = SENDING_RESPONSE;
+            Logger::debug("finalizeCgiResponse: returned 500 due to CGI exit code");
+            return;
+        }
 
         {
                 // 3) Normal behavior:
@@ -1528,6 +1724,10 @@ void Client::clearCgiFinalizeRequest() {
 
 bool Client::isCgiFinalized() const {
     return _cgiFinalized;
+}
+
+int Client::getCgiTimeout() const {
+    return _cgiTimeoutSec;
 }
 
 const std::string& Client::getReceiveBuffer() const { return _receiveBuffer; }

@@ -15,6 +15,9 @@ private:
     std::string _cgiPath;
     std::string _cgiExtension;
     size_t _maxBodySize;
+    bool _denyAll;
+    int _cgiTimeoutSeconds;
+    int _redirectStatus;
 
 public:
     Location();
@@ -28,18 +31,21 @@ public:
     const std::string& getRoot() const;
     const std::string& getIndex() const;
     const std::string& getRedirect() const;
+    int getRedirectStatus() const;
     const std::vector<std::string>& getAllowedMethods() const;
     bool getAutoindex() const;
     const std::string& getUploadPath() const;
     const std::string& getCgiPath() const;
     const std::string& getCgiExtension() const;
     size_t getMaxBodySize() const;
+    int getCgiTimeout() const;
 
     // Setters
     void setPath(const std::string& path);
     void setRoot(const std::string& root);
     void setIndex(const std::string& index);
     void setRedirect(const std::string& redirect);
+    void setRedirectStatus(int status);
     void setAllowedMethods(const std::vector<std::string>& methods);
     void addAllowedMethod(const std::string& method);
     void setAutoindex(bool autoindex);
@@ -47,6 +53,9 @@ public:
     void setCgiPath(const std::string& cgiPath);
     void setCgiExtension(const std::string& cgiExtension);
     void setMaxBodySize(size_t maxBodySize);
+    void setCgiTimeout(int seconds);
+    void setDenyAll(bool deny);
+    bool getDenyAll() const;
 
     // Methods
     bool isMethodAllowed(const std::string& method) const;

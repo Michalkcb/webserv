@@ -52,6 +52,8 @@ private:
 public:
     Client();
     Client(int fd);
+    // Construct client and record the listener port this connection was accepted on.
+    Client(int fd, int listenerPort);
     ~Client();
 
     // Getters
@@ -126,7 +128,8 @@ private:
     // flag. The Server run-loop will later invoke finalizeCgiResponse() on
     // clients that have requested finalization to centralize the action.
     bool _cgiFinalizeRequested;
-    
+    int _listenerPort; // port of the listening socket that accepted this client
+    int _cgiTimeoutSec; // effective CGI timeout for this client (seconds)
     size_t _stageBodyChunkForCgi(size_t maxBytes);
 public:
     // Request that the Client be finalized by the centralized finalizer.
@@ -134,6 +137,7 @@ public:
     bool isCgiFinalizeRequested() const;
     void clearCgiFinalizeRequest();
     bool isCgiFinalized() const;
+    int getCgiTimeout() const;
 };
 
 #endif

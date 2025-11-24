@@ -24,7 +24,7 @@ int main(int argc, char* argv[]) {
         configFile = argv[1];
     }
     
-    // Ustaw poziom logowania: domyślnie INFO (bez użycia getenv, by zachować zgodność z en.subject)
+    // Set logging level to INFO for normal operation
     Logger::setLevel(Logger::INFO);
     
     try {

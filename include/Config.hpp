@@ -14,6 +14,7 @@ public:
         std::string index;
         std::string cgiPath;
         std::string cgiExtension;
+        int cgiTimeoutSeconds;
         size_t maxBodySize;
         std::map<int, std::string> errorPages;
         std::vector<Location> locations;
@@ -64,12 +65,16 @@ public:
     static const std::vector<std::string>& getServerNames(const ServerBlock& server);
     static const std::string& getRoot(const ServerBlock& server);
     static const std::string& getIndex(const ServerBlock& server);
+    static int getCgiTimeout(const ServerBlock& server);
     static size_t getMaxBodySize(const ServerBlock& server);
     static const std::map<int, std::string>& getErrorPages(const ServerBlock& server);
     static const std::vector<Location>& getLocations(const ServerBlock& server);
     
     const ServerBlock* findServer(const std::string& host, int port, const std::string& serverName = "") const;
     const Location* findLocation(const ServerBlock& server, const std::string& uri) const;
+    // Find a server block matching a given port and (optional) server_name.
+    // Returns pointer to ServerBlock within _servers or NULL if none available.
+    const ServerBlock* findServerByPortAndName(int port, const std::string& serverName) const;
 };
 
 #endif

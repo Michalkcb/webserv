@@ -17,6 +17,10 @@ private:
     // file descriptor integers are reused.
     std::vector<void*> _pollOwners;
     bool _running;
+    // Map listener socket fd -> server blocks served by that listener
+    std::map<int, std::vector<const Config::ServerBlock*> > _listenerServers;
+    // Map listener socket fd -> port number
+    std::map<int, int> _listenerPort;
     
     // Socket management
     int _createServerSocket(const std::string& host, int port);

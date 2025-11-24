@@ -59,11 +59,6 @@ server {
         return http://www.example.com/;
     }
 
-    # Test redirect: honor configured status code (301)
-    location /old {
-        return 301 /redirect.html;
-    }
-
     # POST body test - max body 100 bytes, accepts POST
     location /post_body {
         root ./www;
@@ -103,7 +98,7 @@ server {
 }
 
 # Additional server block for different port
- 
+server {
     listen 127.0.0.1:8081;
     server_name test.local;
     root ./www;
@@ -203,4 +198,3 @@ server {
         autoindex off;
     }
 }
- 

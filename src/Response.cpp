@@ -37,6 +37,18 @@ void Response::setStatusCode(int statusCode) {
 }
 
 void Response::setHeader(const std::string& name, const std::string& value) {
+        // Support multiple Set-Cookie headers by concatenating values with '\n'.
+    // This keeps the rest of the header storage API unchanged while allowing
+    // CGI scripts or server code to emit multiple Set-Cookie lines. The
+    // toString() implementation will split and emit them as separate header
+    // lines when serializing the response.
+    if (Utils::toLowerCase(name) == "set-cookie") {
+        Headers::iterator it = _headers.find(name);
+        if (it != _headers.end() && !it->second.empty()) {
+            it->second += std::string("\n") + value;
+            return;
+        }
+    }
     _headers[name] = value;
 }
 
@@ -137,7 +149,16 @@ std::string Response::toString(bool withBody) const {
     for (Headers::const_iterator it = _headers.begin(); it != _headers.end(); ++it) {
         std::string keyLower = Utils::toLowerCase(it->first);
         if (keyLower == "transfer-encoding" && skipTE) continue;
-        ss << it->first << ": " << it->second << "\r\n";
+        // If we have multiple Set-Cookie values concatenated with '\n',
+        // emit each as a separate header line.
+        if (keyLower == "set-cookie") {
+            std::vector<std::string> parts = Utils::split(it->second, "\n");
+            for (size_t i = 0; i < parts.size(); ++i) {
+                ss << it->first << ": " << parts[i] << "\r\n";
+            }
+        } else {
+            ss << it->first << ": " << it->second << "\r\n";
+        }
     }
 
     ss << "\r\n";
@@ -270,6 +291,30 @@ Response Response::createDirectoryListingResponse(const std::string& path, const
     response.setBody(html);
     response.setComplete(true);
     
+    return response;
+}
+
+Response Response::createPlainDirectoryListingResponse(const std::string& path, const std::string& uri) {
+    Response response;
+    (void)uri;
+
+    if (!Utils::isDirectory(path)) {
+        return createErrorResponse(HTTP_NOT_FOUND);
+    }
+
+    std::vector<std::string> files = Utils::getDirectoryListing(path);
+    std::stringstream ss;
+    for (size_t i = 0; i < files.size(); ++i) {
+        std::string fullPath = path + "/" + files[i];
+        std::string displayName = files[i];
+        if (Utils::isDirectory(fullPath)) displayName += "/";
+        ss << displayName << "\n";
+    }
+
+    std::string body = ss.str();
+    response.setHeader("Content-Type", "text/plain");
+    response.setBody(body);
+    response.setComplete(true);
     return response;
 }
 

@@ -3,13 +3,13 @@
 #include "Logger.hpp"
 
 Location::Location() : _path("/"), _root("./www"), _index("index.html"), 
-                       _autoindex(false), _maxBodySize(MAX_BODY_SIZE) {
+                       _autoindex(false), _maxBodySize(MAX_BODY_SIZE), _denyAll(false), _cgiTimeoutSeconds(10), _redirectStatus(302) {
     _allowedMethods.push_back("GET");
 }
 
 Location::Location(const std::string& path) : _path(path), _root("./www"), 
                                               _index("index.html"), _autoindex(false), 
-                                              _maxBodySize(MAX_BODY_SIZE) {
+                                              _maxBodySize(MAX_BODY_SIZE), _denyAll(false), _cgiTimeoutSeconds(10), _redirectStatus(302) {
     _allowedMethods.push_back("GET");
 }
 
@@ -23,12 +23,15 @@ Location& Location::operator=(const Location& other) {
         _root = other._root;
         _index = other._index;
         _redirect = other._redirect;
+        _redirectStatus = other._redirectStatus;
         _allowedMethods = other._allowedMethods;
         _autoindex = other._autoindex;
         _uploadPath = other._uploadPath;
         _cgiPath = other._cgiPath;
         _cgiExtension = other._cgiExtension;
         _maxBodySize = other._maxBodySize;
+        _denyAll = other._denyAll;
+        _cgiTimeoutSeconds = other._cgiTimeoutSeconds;
     }
     return *this;
 }
@@ -41,18 +44,21 @@ const std::string& Location::getPath() const { return _path; }
 const std::string& Location::getRoot() const { return _root; }
 const std::string& Location::getIndex() const { return _index; }
 const std::string& Location::getRedirect() const { return _redirect; }
+int Location::getRedirectStatus() const { return _redirectStatus; }
 const std::vector<std::string>& Location::getAllowedMethods() const { return _allowedMethods; }
 bool Location::getAutoindex() const { return _autoindex; }
 const std::string& Location::getUploadPath() const { return _uploadPath; }
 const std::string& Location::getCgiPath() const { return _cgiPath; }
 const std::string& Location::getCgiExtension() const { return _cgiExtension; }
 size_t Location::getMaxBodySize() const { return _maxBodySize; }
+int Location::getCgiTimeout() const { return _cgiTimeoutSeconds; }
 
 // Setters
 void Location::setPath(const std::string& path) { _path = path; }
 void Location::setRoot(const std::string& root) { _root = root; }
 void Location::setIndex(const std::string& index) { _index = index; }
 void Location::setRedirect(const std::string& redirect) { _redirect = redirect; }
+void Location::setRedirectStatus(int status) { _redirectStatus = status; }
 
 void Location::setAllowedMethods(const std::vector<std::string>& methods) {
     _allowedMethods = methods;
@@ -72,6 +78,9 @@ void Location::setUploadPath(const std::string& uploadPath) { _uploadPath = uplo
 void Location::setCgiPath(const std::string& cgiPath) { _cgiPath = cgiPath; }
 void Location::setCgiExtension(const std::string& cgiExtension) { _cgiExtension = cgiExtension; }
 void Location::setMaxBodySize(size_t maxBodySize) { _maxBodySize = maxBodySize; }
+void Location::setCgiTimeout(int seconds) { _cgiTimeoutSeconds = seconds; }
+void Location::setDenyAll(bool deny) { _denyAll = deny; }
+bool Location::getDenyAll() const { return _denyAll; }
 
 bool Location::isMethodAllowed(const std::string& method) const {
     std::string upperMethod = Utils::toUpperCase(method);

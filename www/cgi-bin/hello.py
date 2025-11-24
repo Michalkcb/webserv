@@ -3,4 +3,4 @@
 # print()
 # print("Hello from Python CGI (hello.py)")
 for i in range (0,10,1):
-	print(f"{i} ltomasze")
+	print(f"{i} Hello from Python CGI (hello.py)")

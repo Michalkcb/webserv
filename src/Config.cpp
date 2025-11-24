@@ -64,6 +64,16 @@ void Config::loadConfig(const std::string& filename) {
     if (_servers.empty()) {
         throw std::runtime_error("No server blocks found in configuration");
     }
+    // Debug: log parsed server blocks and their locations
+    for (size_t i = 0; i < _servers.size(); ++i) {
+        const ServerBlock& s = _servers[i];
+        std::string names;
+        for (size_t j = 0; j < s.serverNames.size(); ++j) { if (j) names += ","; names += s.serverNames[j]; }
+        Logger::debug("Parsed server: host='" + s.host + "' port=" + Utils::intToString(s.port) + " names='" + names + "' root='" + s.root + "'");
+        for (size_t k = 0; k < s.locations.size(); ++k) {
+            Logger::debug("  location: path='" + s.locations[k].getPath() + "' root='" + s.locations[k].getRoot() + "'");
+        }
+    }
 }
 
 void Config::_parseConfigFile(const std::string& filename) {
@@ -84,6 +94,7 @@ void Config::_parseConfigFile(const std::string& filename) {
             server.root = "./www";
             server.index = "index.html";
             server.maxBodySize = MAX_BODY_SIZE;
+            server.cgiTimeoutSeconds = 10;
             
             _parseServerBlock(file, server);
             _servers.push_back(server);
@@ -108,7 +119,23 @@ void Config::_parseServerBlock(std::ifstream& file, ServerBlock& server) {
             locationPath = Utils::trim(locationPath);
             
             Location location(locationPath);
-            location.setRoot(server.root); // Inherit server root
+            // Default root for a location inherits server.root but maps
+            // the location path into the filesystem when the location
+            // root wasn't explicitly provided. For example, a
+            // `location /private {}` with server root `./www` should
+            // map to `./www/private` by default so that getFullPath()
+            // resolves URIs like `/private/secret.txt` ->
+            // `./www/private/secret.txt`.
+            if (locationPath != "/") {
+                std::string locRoot = server.root;
+                // remove trailing slash from server.root if present
+                if (!locRoot.empty() && locRoot[locRoot.size()-1] == '/') locRoot.erase(locRoot.size()-1);
+                // locationPath begins with '/', so concatenate directly
+                locRoot += locationPath;
+                location.setRoot(locRoot);
+            } else {
+                location.setRoot(server.root);
+            }
             _parseLocationBlock(file, location);
             server.locations.push_back(location);
             continue;
@@ -138,6 +165,10 @@ void Config::_parseServerBlock(std::ifstream& file, ServerBlock& server) {
             if (!values.empty()) server.root = values[0];
         } else if (directive == "cgi_path") {
             if (!values.empty()) server.cgiPath = values[0];
+        } else if (directive == "cgi_timeout") {
+            if (!values.empty()) {
+                server.cgiTimeoutSeconds = Utils::stringToInt(values[0]);
+            }
         } else if (directive == "cgi_ext" || directive == "cgi_extension") {
             if (!values.empty()) server.cgiExtension = values[0];
         } else if (directive == "index") {
@@ -174,6 +205,7 @@ void Config::_parseServerBlock(std::ifstream& file, ServerBlock& server) {
         // Propagate server-level CGI settings to default location
         if (!server.cgiPath.empty()) defaultLocation.setCgiPath(server.cgiPath);
         if (!server.cgiExtension.empty()) defaultLocation.setCgiExtension(server.cgiExtension);
+        defaultLocation.setCgiTimeout(server.cgiTimeoutSeconds);
         server.locations.push_back(defaultLocation);
     }
 
@@ -194,6 +226,7 @@ void Config::_parseServerBlock(std::ifstream& file, ServerBlock& server) {
         cgiLocation.setAutoindex(false);
         if (!server.cgiPath.empty()) cgiLocation.setCgiPath(server.cgiPath);
         if (!server.cgiExtension.empty()) cgiLocation.setCgiExtension(server.cgiExtension);
+        cgiLocation.setCgiTimeout(server.cgiTimeoutSeconds);
         server.locations.push_back(cgiLocation);
     }
 }
@@ -220,8 +253,20 @@ void Config::_parseLocationBlock(std::ifstream& file, Location& location) {
         } else if (directive == "allow_methods" || directive == "methods") {
             location.setAllowedMethods(values);
         } else if (directive == "return") {
-            if (values.size() >= 2) {
-                location.setRedirect(values[1]);
+            if (!values.empty()) {
+                // Support both forms:
+                //   return 301 http://example.com/;
+                //   return http://example.com/;
+                std::string url;
+                int status = 302;
+                if (values.size() >= 2 && Utils::isNumber(values[0])) {
+                    status = Utils::stringToInt(values[0]);
+                    url = values[1];
+                } else {
+                    url = values[0];
+                }
+                location.setRedirect(url);
+                location.setRedirectStatus(status);
             }
         } else if (directive == "autoindex") {
             if (!values.empty()) {
@@ -242,6 +287,17 @@ void Config::_parseLocationBlock(std::ifstream& file, Location& location) {
             }
         } else if (directive == "upload_path") {
             if (!values.empty()) location.setUploadPath(values[0]);
+        } else if (directive == "cgi_timeout") {
+            if (!values.empty()) {
+                location.setCgiTimeout(Utils::stringToInt(values[0]));
+            }
+        } else if (directive == "deny") {
+            if (!values.empty()) {
+                // Support only `deny all;` for now
+                if (values[0] == "all") {
+                    location.setDenyAll(true);
+                }
+            }
         } else if (directive == "cgi_path") {
             if (!values.empty()) location.setCgiPath(values[0]);
         } else if (directive == "cgi_ext" || directive == "cgi_extension") {
@@ -343,4 +399,30 @@ const Location* Config::findLocation(const ServerBlock& server, const std::strin
     }
     
     return bestMatch;
+}
+
+const Config::ServerBlock* Config::findServerByPortAndName(int port, const std::string& serverName) const {
+    std::string nameLower = Utils::toLowerCase(serverName);
+
+    // First pass: try to match server_name among servers that listen on the port
+    if (!nameLower.empty()) {
+        for (size_t i = 0; i < _servers.size(); ++i) {
+            if (_servers[i].port == port) {
+                const std::vector<std::string>& names = _servers[i].serverNames;
+                for (size_t j = 0; j < names.size(); ++j) {
+                    if (Utils::toLowerCase(names[j]) == nameLower) {
+                        return &_servers[i];
+                    }
+                }
+            }
+        }
+    }
+
+    // Second pass: return first server listening on the port
+    for (size_t i = 0; i < _servers.size(); ++i) {
+        if (_servers[i].port == port) return &_servers[i];
+    }
+
+    // Fallback to first server in config
+    return _servers.empty() ? NULL : &_servers[0];
 }

@@ -334,7 +334,11 @@ void Server::_acceptNewConnection(int serverSocket) {
     // Drop readlink-based diagnostics to stay within allowed functions
     
     // Allocate Client on the heap to ensure single owner semantics
-    Client* newClient = new Client(clientSocket);
+    // Pass the listener port so the client can perform Host-based server selection
+    int listenerPort = 0;
+    std::map<int,int>::iterator lpIt = _listenerPort.find(serverSocket);
+    if (lpIt != _listenerPort.end()) listenerPort = lpIt->second;
+    Client* newClient = new Client(clientSocket, listenerPort);
     _clients[clientSocket] = newClient;
 }
 
@@ -344,52 +348,43 @@ void Server::_setupServerSockets() {
         throw std::runtime_error("No servers configured");
     }
 
-    // Create one listening socket per configured server block.
-    // If creation fails for any, clean up and propagate the error.
+    // Group server blocks by host:port so multiple server blocks that listen
+    // on the same address/port will share a single listening socket.
+    std::map<std::string, std::vector<const Config::ServerBlock*> > groups;
+    for (size_t i = 0; i < servers.size(); ++i) {
+        const Config::ServerBlock& sb = servers[i];
+        std::string host = Config::getHost(sb);
+        int port = Config::getPort(sb);
+        std::string key = host + ":" + Utils::intToString(port);
+        groups[key].push_back(&sb);
+    }
+
     std::vector<int> created;
     try {
-        for (size_t i = 0; i < servers.size(); ++i) {
-            const Config::ServerBlock& sb = servers[i];
-            int sock = _createServerSocket(Config::getHost(sb), Config::getPort(sb));
+        for (std::map<std::string, std::vector<const Config::ServerBlock*> >::const_iterator it = groups.begin(); it != groups.end(); ++it) {
+            // parse key back to host and port
+            const std::string& key = it->first;
+            size_t colonPos = key.find(':');
+            std::string host = (colonPos != std::string::npos) ? key.substr(0, colonPos) : "";
+            int port = 0;
+            if (colonPos != std::string::npos) port = Utils::stringToInt(key.substr(colonPos + 1));
+
+            int sock = _createServerSocket(host, port);
             _serverSockets.push_back(sock);
             created.push_back(sock);
-            Logger::info("Listening on " + Config::getHost(sb) + ":" + Utils::intToString(Config::getPort(sb)));
+
+            // Record which server blocks this listener should represent
+            _listenerPort[sock] = port;
+            _listenerServers[sock] = it->second;
+
+            Logger::info("Listening on " + (host.empty() ? std::string("*") : host) + ":" + Utils::intToString(port) + " (serves " + Utils::intToString(it->second.size()) + " server blocks)");
         }
     } catch (...) {
-        // cleanup
         for (size_t i = 0; i < created.size(); ++i) close(created[i]);
         _serverSockets.clear();
+        _listenerServers.clear();
+        _listenerPort.clear();
         throw;
-    }
-}
-
-void Server::_handleClientRead(int clientFd) {
-    std::map<int, Client*>::iterator it = _clients.find(clientFd);
-    if (it == _clients.end()) return;
-    
-    Client* client = it->second;
-    ssize_t bytesRead = client->receiveData();
-    
-    // Close connection if client disconnected or client reached terminal state
-    if ((bytesRead == 0) ||
-        client->getState() == Client::FINISHED || 
-        client->getState() == Client::ERROR_STATE) {
-        _closeClient(clientFd);
-        return;
-    }
-    
-    client->processRequest(_config);
-}
-
-void Server::_handleClientWrite(int clientFd) {
-    std::map<int, Client*>::iterator it = _clients.find(clientFd);
-    if (it == _clients.end()) return;
-    
-    Client* client = it->second;
-    ssize_t bytesSent = client->sendData();
-    
-    if (bytesSent < 0 || client->getState() == Client::FINISHED || client->getState() == Client::ERROR_STATE) {
-        _closeClient(clientFd);
     }
 }
 
@@ -483,7 +478,15 @@ void Server::_checkCgiCompletion() {
             // when the CGI timed out and the client is no longer in
             // CGI_PROCESSING (or is otherwise idle).
             bool cgiFinished = cgi->isFinished();
-            bool cgiTimedOut = cgi->hasTimedOut(600); // 10 minutes for large uploads
+            // Use a shorter default CGI idle timeout to avoid long hangs
+            // from buggy or infinite-loop scripts. This value can be tuned
+            // globally here; per-server configuration would be a future
+            // enhancement.
+            // Determine effective timeout from client-level setting (which was
+            // propagated from location/server during request processing).
+            int timeoutSec = client->getCgiTimeout();
+            if (timeoutSec <= 0) timeoutSec = 10; // fallback
+            bool cgiTimedOut = cgi->hasTimedOut(timeoutSec);
             bool clientIdle = client->hasTimedOut(30);
             time_t now = time(NULL);
             time_t secondsSinceClientActivity = now - client->getLastActivity();
@@ -499,8 +502,17 @@ void Server::_checkCgiCompletion() {
             //   is already idle (no more data expected), OR
             // - the CGI timed out and the client has been idle long enough
             //   (to avoid racing with ongoing uploads).
-            if (cgiFinished || (cgiTimedOut && clientIdle)) {
+            // Allow finalization when CGI finished normally OR when the CGI
+            // timed out and the client is either idle or not uploading
+            // (request is complete). Previously we required the client to
+            // be idle for timeouts which prevented GET/HEAD requests from
+            // being finalized promptly; relaxing the condition avoids
+            // long hangs for scripts that never produce output.
+            if (cgiFinished || (cgiTimedOut && (clientIdle || client->getRequest().isComplete()))) {
                 Logger::debug("CGI completion or timeout detected for client " + Utils::intToString(it->first));
+                if (cgiTimedOut) {
+                    Logger::info("CGI appears timed out for client " + Utils::intToString(it->first));
+                }
 
                 // Nie wykonujemy żadnego read() tutaj: odczyt CGI stdout wyłącznie po POLLIN
                 // (obsługiwany w _handlePollEvents -> Client::handleCgiOutput()).
@@ -513,8 +525,8 @@ void Server::_checkCgiCompletion() {
                 }
 
                 bool canFinalizeNow = false;
-                if (cgiTimedOut && clientIdle) {
-                    // Timeout: możemy finalizować natychmiast bez dalszych odczytów
+                if (cgiTimedOut && (clientIdle || client->getRequest().isComplete())) {
+                    // Timeout: if client is idle or request is complete, finalize
                     canFinalizeNow = true;
                 } else if (cgiFinished) {
                     // Finalizacja po normalnym zakończeniu tylko gdy stdout CGI został już zamknięty (EOF przetworzony)
@@ -536,8 +548,12 @@ void Server::_checkCgiCompletion() {
                                         ss << "CALLSITE:server_check ts=" << ts << " client_socket=" << client->getFd() << " client_ptr=" << (void*)client << "\n";
                                         serverDiagFinalLog(ss.str());
                                     }
-                                    // Defer to the centralized finalizer instead of finalizing here.
-                                    client->requestCgiFinalize();
+                                    // Finalize directly here to avoid races where
+                                    // repeated timeout checks do not result in the
+                                    // centralized finalizer running promptly. This
+                                    // is safe because we hold no locks here and
+                                    // finalizeCgiResponse() is idempotent-guarded.
+                                    client->finalizeCgiResponse();
                         }
                     }
                 }
