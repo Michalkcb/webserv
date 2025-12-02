@@ -7,6 +7,7 @@
 #include <fcntl.h>
 #include <netinet/tcp.h>
 #include <netdb.h>
+#include <set>
 
 Server* Server::instance = NULL;
 
@@ -190,7 +191,9 @@ void Server::_handlePollEvents() {
 
     // 2) Client-related fds and CGI pipes. Dispatch using _pollOwners to avoid
     //    fd-number-based misrouting when fds are recycled by the kernel.
+    // Enforce: only one read OR one write per client per poll() iteration.
     std::vector<int> clients_to_remove;
+    std::set<Client*> clientDidOneOp; // track clients that already performed an I/O op this iteration
     for (size_t i = _serverSockets.size(); i < _pollFds.size(); ++i) {
         short revents = _pollFds[i].revents;
         if (revents == 0) continue;
@@ -199,30 +202,38 @@ void Server::_handlePollEvents() {
         if (!owner) continue;
         Client* client = (Client*)owner;
         int current_fd = _pollFds[i].fd;
-
         // Event on client's main socket
         if (current_fd == client->getFd()) {
+            // If this client already performed an I/O op this iteration, skip
+            if (clientDidOneOp.find(client) != clientDidOneOp.end()) {
+                // Still allow final removal checks later
+                if (client->getState() == Client::FINISHED || client->getState() == Client::ERROR_STATE)
+                    clients_to_remove.push_back(client->getFd());
+                continue;
+            }
+
             if (revents & (POLLHUP | POLLERR)) {
                 client->markPeerClosed();
                 Logger::debug("Poll revents on client fd=" + Utils::intToString(client->getFd()) + ": HUP/ERR. sendBufferLen=" + Utils::intToString((int)client->getSendBuffer().length()));
-                // On HUP/ERR prefer to flush any pending send buffer once.
-                if ((revents & POLLOUT) && !client->getSendBuffer().empty()) client->sendData();
+                // On HUP/ERR prefer to flush any pending send buffer once,
+                // but count that flush as the client's single allowed op.
+                if ((revents & POLLOUT) && !client->getSendBuffer().empty()) {
+                    client->sendData();
+                    clientDidOneOp.insert(client);
+                }
                 if (client->getSendBuffer().empty()) client->setState(Client::FINISHED);
             } else {
-                // Subject requirement: only one read OR one write per client per poll()
-                // If both POLLIN and POLLOUT are set, perform a single operation to
-                // satisfy the evaluation constraint. We prefer to perform receive
-                // first (to progress request parsing) and skip the send in that
-                // iteration. This keeps behaviour deterministic and simple.
-                bool didOne = false;
-                if ((revents & POLLIN) && !didOne) {
+                // Only perform a single operation per client per poll iteration.
+                // If both POLLIN and POLLOUT are set, prioritize POLLIN (to
+                // make forward progress on parsing). Otherwise handle the one
+                // available event.
+                if (revents & POLLIN) {
                     client->receiveData();
                     client->processRequest(_config);
-                    didOne = true;
-                }
-                if ((revents & POLLOUT) && !didOne) {
+                    clientDidOneOp.insert(client);
+                } else if (revents & POLLOUT) {
                     client->sendData();
-                    didOne = true;
+                    clientDidOneOp.insert(client);
                 }
             }
             if (client->getState() == Client::FINISHED || client->getState() == Client::ERROR_STATE)
@@ -232,11 +243,18 @@ void Server::_handlePollEvents() {
 
         // Events on CGI pipes
         if (client->getCgi()) {
-            if (current_fd == client->getCgi()->getInputFd() && (revents & POLLOUT)) {
-                client->handleCgiInput();
-            }
-            if (current_fd == client->getCgi()->getOutputFd() && (revents & (POLLIN | POLLHUP | POLLERR))) {
-                client->handleCgiOutput();
+            // Skip CGI pipe handling if client already performed an op
+            if (clientDidOneOp.find(client) != clientDidOneOp.end()) {
+                // no-op
+            } else {
+                if (current_fd == client->getCgi()->getInputFd() && (revents & POLLOUT)) {
+                    client->handleCgiInput();
+                    clientDidOneOp.insert(client);
+                }
+                if (current_fd == client->getCgi()->getOutputFd() && (revents & (POLLIN | POLLHUP | POLLERR))) {
+                    client->handleCgiOutput();
+                    clientDidOneOp.insert(client);
+                }
             }
         }
     }

@@ -1,6 +1,7 @@
 #include "Config.hpp"
 #include "Utils.hpp"
 #include "Logger.hpp"
+#include <set>
 
 Config::Config() {
 }
@@ -63,6 +64,34 @@ void Config::loadConfig(const std::string& filename) {
     
     if (_servers.empty()) {
         throw std::runtime_error("No server blocks found in configuration");
+    }
+    // Validation: ensure there are no ambiguous server blocks listening on the
+    // same host:port without distinct server_name values. If two server blocks
+    // bind to the same listen address:port and either one omits a server_name
+    // (acts as a catch-all) or they share any server_name, the configuration
+    // is ambiguous and we treat it as an error.
+    for (size_t i = 0; i < _servers.size(); ++i) {
+        for (size_t j = i + 1; j < _servers.size(); ++j) {
+            if (_servers[i].host == _servers[j].host && _servers[i].port == _servers[j].port) {
+                const std::vector<std::string>& a = _servers[i].serverNames;
+                const std::vector<std::string>& b = _servers[j].serverNames;
+                bool aEmpty = a.empty();
+                bool bEmpty = b.empty();
+                if (aEmpty || bEmpty) {
+                    throw std::runtime_error("Ambiguous server blocks: multiple servers listen on "
+                                             + _servers[i].host + ":" + Utils::intToString(_servers[i].port)
+                                             + " where at least one server has no server_name. Please provide distinct server_name values.");
+                }
+                std::set<std::string> aset(a.begin(), a.end());
+                for (size_t k = 0; k < b.size(); ++k) {
+                    if (aset.find(b[k]) != aset.end()) {
+                        throw std::runtime_error("Conflicting server_name '" + b[k] + "' on the same listen "
+                                                 + _servers[i].host + ":" + Utils::intToString(_servers[i].port)
+                                                 + ". Provide unique server_name values per server block.");
+                    }
+                }
+            }
+        }
     }
     // Debug: log parsed server blocks and their locations
     for (size_t i = 0; i < _servers.size(); ++i) {

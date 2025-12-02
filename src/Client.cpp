@@ -300,6 +300,15 @@ ssize_t Client::receiveData() {
     } else if (bytesRead == 0) {
         // Peer closed the connection
         _peerClosed = true;
+        // Treat EOF as terminal for this client: mark finished so server
+        // removes the client in the next cleanup pass. This avoids
+        // repeatedly polling a socket that will always return 0 bytes.
+        _state = FINISHED;
+    }
+    if (bytesRead < 0) {
+        // No progress on read; do not inspect errno here. Rely on poll()
+        // (POLLIN/HUP/ERR) and timeouts to determine connection closure.
+        return bytesRead;
     }
     return bytesRead;
 }
@@ -311,6 +320,7 @@ ssize_t Client::sendData() {
     if (bytesSent > 0) {
         _sendBuffer.erase(0, bytesSent);
         updateLastActivity();
+        // bytes sent successfully; send buffer updated above.
         if (_sendBuffer.empty()) {
             if (_state == SENDING_RESPONSE) {
                 // IMPORTANT: If the client is still uploading the current request
@@ -338,7 +348,17 @@ ssize_t Client::sendData() {
         return bytesSent;
     }
 
-    // Do not adjust behaviour based on errno; simply signal no progress.
+    // Explicitly handle send() returning 0 (no progress). Do not inspect
+    // errno here; treat 0 as no-progress and let the main event loop
+    // (poll) drive retries or detect HUP/ERR conditions.
+    if (bytesSent == 0) {
+        Logger::debug(std::string("sendData fd=") + Utils::intToString(_fd) + " returned 0 (no progress)");
+        return -1;
+    }
+
+    // bytesSent < 0: no progress on write; do not inspect errno here.
+    // Return -1 to indicate failure/no-progress and allow poll()/HUP/ERR
+    // to drive connection cleanup or retries.
     return -1;
 }
 
@@ -980,7 +1000,14 @@ Response Client::_handlePostRequest(const Config::ServerBlock& serverConfig, con
         if (_request.getBody().size() > limit) {
             return Response::createErrorResponse(HTTP_PAYLOAD_TOO_LARGE);
         }
-        Response r(HTTP_OK);
+        // Persist the posted body to a timestamped file under www/uploads
+        std::string uploadDir = "www/uploads";
+        std::string fname = std::string("post_body_") + Utils::intToString((int)time(NULL)) + ".txt";
+        std::string fullPath = uploadDir + "/" + fname;
+        if (!Utils::writeFile(fullPath, _request.getBody())) {
+            return Response::createErrorResponse(HTTP_INTERNAL_SERVER_ERROR);
+        }
+        Response r(HTTP_CREATED);
         r.setHeader("Content-Type", "text/plain");
         r.setBody("ok");
         r.setComplete(true);
