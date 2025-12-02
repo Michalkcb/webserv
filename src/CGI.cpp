@@ -310,10 +310,11 @@ bool CGI::execute(const Request& request, const std::string& scriptPath) {
     for (size_t i = 0; envArray[i]; ++i) delete [] envArray[i];
     delete [] envArray;
 
-    Logger::debug("CGI execute(): pid=" + Utils::intToString(_pid) +
-                  " mappedBla=" + (isMappedBla ? "true" : "false") +
-                  " hasBody=" + (hasBody ? "true" : "false") +
-                  " PATH_INFO=" + _env["PATH_INFO"]);
+    Logger::info("CGI execute(): pid=" + Utils::intToString(_pid) +
+                 " mappedBla=" + (isMappedBla ? "true" : "false") +
+                 " hasBody=" + (hasBody ? "true" : "false") +
+                 " PATH_INFO=" + _env["PATH_INFO"] +
+                 " exec=" + Utils::intToString(_execId) + " alloc=" + Utils::intToString(_allocId));
 
     return true;
 }
@@ -403,7 +404,7 @@ ssize_t CGI::writeToInput(const char* data, size_t len) {
     }
 
     if (total > 0) {
-        Logger::debug("CGI::writeToInput() wrote " + Utils::intToString((int)total) + " bytes");
+        Logger::debug("CGI::writeToInput() wrote " + Utils::intToString((int)total) + " bytes to fd=" + Utils::intToString(_inputFd) + " pid=" + Utils::intToString(_pid));
         return (ssize_t)total;
     }
     return -1;
@@ -413,18 +414,18 @@ ssize_t CGI::writeToInput(const char* data, size_t len) {
 ssize_t CGI::readFromOutput(char* buffer, size_t size) {
     if (_outputFd == -1) return -1;
     // Debug: log low-level read attempt on CGI output fd
-    Logger::debug("CGI::readFromOutput() about to read fd=" + Utils::intToString(_outputFd) + ", size=" + Utils::intToString((int)size));
+    Logger::debug("CGI::readFromOutput() about to read fd=" + Utils::intToString(_outputFd) + ", size=" + Utils::intToString((int)size) + " pid=" + Utils::intToString(_pid));
     ssize_t bytesRead = read(_outputFd, buffer, size);
     if (bytesRead > 0) {
         _lastOutputTime = time(NULL);
         _totalBytesRead += bytesRead;
-        Logger::debug("CGI::readFromOutput() read " + Utils::intToString(bytesRead) + " bytes, totalRead=" + Utils::intToString(_totalBytesRead));
+        Logger::debug("CGI::readFromOutput() read " + Utils::intToString(bytesRead) + " bytes, totalRead=" + Utils::intToString(_totalBytesRead) + " pid=" + Utils::intToString(_pid));
     } else if (bytesRead == 0) {
-        Logger::debug("CGI::readFromOutput() returned 0 (EOF)");
+        Logger::debug("CGI::readFromOutput() returned 0 (EOF) pid=" + Utils::intToString(_pid));
     } else {
         // Do not log strerror(errno) or errno value here: evaluation forbids
         // checking errno after read/write. Use a generic debug message.
-        Logger::debug("CGI::readFromOutput() error reading from output fd");
+        Logger::debug("CGI::readFromOutput() error reading from output fd pid=" + Utils::intToString(_pid));
     }
     return bytesRead;
 }
@@ -458,12 +459,30 @@ void CGI::closeInput() {
 
 int CGI::waitForCompletion() {
     if (_pid == -1) return -1;
-    
+
     int status;
-    waitpid(_pid, &status, 0);
+    // Use non-blocking wait to avoid stalling the main event loop.
+    int res = waitpid(_pid, &status, WNOHANG);
+    if (res == 0) {
+        // Child still running; caller should retry later via poll-driven finalizer.
+        return -1;
+    }
+    if (res == -1) {
+        // Error from waitpid: treat as finished but report failure.
+        Logger::debug(std::string("CGI::waitForCompletion(): waitpid error: ") + std::string(strerror(errno)) + " pid=" + Utils::intToString(_pid));
+        _isRunning = false;
+        int saved_pid = _pid;
+        _pid = -1;
+        (void)saved_pid;
+        return -1;
+    }
+
+    // res == _pid: child has exited
     _isRunning = false;
-    
-    return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+    int exitCode = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+    // Clear pid now that we've reaped it
+    _pid = -1;
+    return exitCode;
 }
 
 int CGI::getInputFd() const { return _inputFd; }

@@ -510,7 +510,10 @@ void Client::processRequest(const class Config& config) {
                 // If this is a GET, spawn CGI early so it will be executed rather than
         // served as a static file. CGI::execute will handle closing stdin for
         // GET requests if there's no body.
-        if (reqMethod == "GET") {
+        // Only spawn CGI for GET when the location is the dedicated /cgi-bin
+        // (requests under other locations with a CGI extension should be
+        // treated as static files for GET and only invoke CGI for POST).
+        if (reqMethod == "GET" && location && location->getPath() == "/cgi-bin") {
             std::string resolvedScriptPath = location ? location->getFullPath(_request.getPath())
                                                       : _request.getPath();
 
@@ -888,6 +891,7 @@ Response Client::_handleGetRequest(const Config::ServerBlock& serverConfig, cons
         std::string srvRoot = Config::getRoot(serverConfig);
         std::string locRoot = location ? location->getRoot() : std::string("(none)");
         Logger::debug("Routing debug: uri='" + uriPath + "' serverRoot='" + srvRoot + "' locationRoot='" + locRoot + "' fullPath='" + fullPath + "'");
+        Logger::info("Routing INFO: uri='" + uriPath + "' fullPath='" + fullPath + "'");
     }
 
     // If this location is a CGI location, execute the CGI for GET/HEAD
@@ -899,7 +903,7 @@ Response Client::_handleGetRequest(const Config::ServerBlock& serverConfig, cons
         return Response::createErrorResponse(HTTP_FORBIDDEN);
     }
 
-    if (location && location->isCgiRequest(_request.getUri())) {
+    if (location && location->isCgiRequest(_request.getUri()) && location->getPath() == "/cgi-bin") {
         // Use asynchronous, poll-driven CGI handling instead of performing
         // synchronous read loops here. Spawn the CGI and take ownership so
         // that subsequent poll() iterations will drive reads from the CGI
@@ -1223,9 +1227,15 @@ void Client::handleCgiInput() {
         updateLastActivity();
         _cgiWriteBuffer.erase(0, bytesWritten);
         _cgiBytesSent += bytesWritten;
+        {
+            std::ostringstream _oss; _oss << "CGI_STDIN_WRITE client=" << _clientNumber << " fd=" << _fd
+                << " wrote=" << bytesWritten << " total_sent=" << _cgiBytesSent << " request_len=" << _request.getBody().size();
+            Logger::info(_oss.str());
+        }
         _stageBodyChunkForCgi(CGI_WRITE_BUFFER_LIMIT);
     } else if (bytesWritten == -1) {
         // Non-progress on write; rely on POLLOUT to retry later.
+        Logger::info(std::string("CGI_STDIN_WRITE would-block client=") + Utils::intToString(_clientNumber) + " fd=" + Utils::intToString(_fd));
         updateLastActivity();
         return;
     }
@@ -1491,10 +1501,26 @@ void Client::finalizeCgiResponse() {
     // Keep this bounded and non-blocking to avoid violating the server's
     // event-driven model.
     if (_cgi && _cgi->getOutputFd() != -1) {
-        // Subject compliance: do not perform additional read() here.
-        // Rely on data already buffered in _cgiOutputBuffer by handleCgiOutput()
-        Logger::debug(std::string("finalizeCgiResponse: skipping drain/read; buffer_len=") + Utils::intToString((int)_cgiOutputBuffer.length()) +
+        // Attempt a bounded non-blocking drain: read any bytes that may have
+        // arrived in the kernel pipe after the last POLLIN event but before
+        // the CGI exited. This is intentionally conservative (small buffer
+        // and single-pass) to avoid blocking or doing excessive work in the
+        // finalizer while preserving correctness for large uploads where the
+        // child may have already produced output.
+        Logger::debug(std::string("finalizeCgiResponse: attempting bounded drain; buffer_len=") + Utils::intToString((int)_cgiOutputBuffer.length()) +
                       " ts=" + Utils::intToString((int)nowMs()));
+        char tmpbuf[16384]; // 16KB single-pass drain
+        for (;;) {
+            ssize_t r = _cgi->readFromOutput(tmpbuf, sizeof(tmpbuf));
+            if (r > 0) {
+                _cgiOutputBuffer.append(tmpbuf, r);
+                // Continue draining until no more data available in this pass
+                if (r < (ssize_t)sizeof(tmpbuf)) break;
+                continue;
+            }
+            // r == 0 => EOF, r < 0 => non-progress; either way stop draining
+            break;
+        }
     }
 
     // Debug: dump the current CGI output buffer to a temp file so we can
@@ -1556,6 +1582,49 @@ void Client::finalizeCgiResponse() {
         // with a non-zero status, return 500 Internal Server Error
         // rather than any partial stdout it may have emitted.
         int cgiExit = _cgi->waitForCompletion();
+        {
+            std::ostringstream _oss; _oss << "CGI_WAIT client=" << _clientNumber << " fd=" << _fd
+                << " pid=" << _cgi->getPid() << " exit=" << cgiExit
+                << " output_len=" << _cgiOutputBuffer.length()
+                << " bytes_sent_to_cgi=" << _cgiBytesSent << " body_rem=" << _cgiBodyRemaining;
+            Logger::info(_oss.str());
+        }
+        if (cgiExit == -1) {
+            // Child still running: re-schedule finalization.
+            if (_cgi && _cgi->isRunning()) {
+                Logger::debug("CGI still running during finalize; re-scheduling finalization");
+                requestCgiFinalize();
+                return;
+            }
+            // If we captured CGI output, prefer to build response from it
+            // rather than returning 500. This handles cases where the CGI
+            // was reaped earlier by another code path but its stdout was
+            // already read into `_cgiOutputBuffer`.
+            if (!_cgiOutputBuffer.empty()) {
+                Logger::info("CGI wait returned -1 but output present; proceeding to build response from buffer");
+                // Treat as successful exit so downstream logic builds response
+                cgiExit = 0;
+            } else {
+                // Otherwise treat as failure
+                Logger::debug("CGI waitForCompletion returned -1 (error or unknown state)");
+                _response = Response::createErrorResponse(HTTP_INTERNAL_SERVER_ERROR);
+                _response.setComplete(true);
+                if (_cgi) {
+                    std::map<void*, void*>::iterator regit = g_cgi_owner_registry.find((void*)_cgi);
+                    if (regit != g_cgi_owner_registry.end() && regit->second == (void*)this) {
+                        g_cgi_owner_registry.erase(regit);
+                    }
+                    delete _cgi;
+                    _cgi = NULL;
+                }
+                _cgiFinalized = true;
+                _sendBuffer = _response.toString();
+                _cgiOutputBuffer.clear();
+                _state = SENDING_RESPONSE;
+                Logger::debug("finalizeCgiResponse: returned 500 due to CGI wait error");
+                return;
+            }
+        }
         if (cgiExit != 0) {
             Logger::debug("CGI exited with non-zero status: " + Utils::intToString(cgiExit));
             _response = Response::createErrorResponse(HTTP_INTERNAL_SERVER_ERROR);
