@@ -29,6 +29,7 @@ cp ubuntu_cgi_tester www/cgi-bin/cgi_test && chmod +x www/cgi-bin/cgi_test
 
 make
 
+
 cle
 
 ./webserv tester_config.conf &
