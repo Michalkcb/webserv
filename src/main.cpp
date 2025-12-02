@@ -24,8 +24,10 @@ int main(int argc, char* argv[]) {
         configFile = argv[1];
     }
     
-    // Set logging level to INFO for normal operation
-    Logger::setLevel(Logger::INFO);
+    // Set logging level: use DEBUG if environment variable WEBSERV_DEBUG=1
+    const char* dbg = getenv("WEBSERV_DEBUG");
+    if (dbg && dbg[0] == '1') Logger::setLevel(Logger::DEBUG);
+    else Logger::setLevel(Logger::INFO);
     
     try {
         Logger::info("=== Webserv HTTP Server ===");

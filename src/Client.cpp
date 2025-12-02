@@ -801,18 +801,34 @@ void Client::processRequest(const class Config& config) {
 
         // Dispatch
         Logger::debug("Processing " + _request.getMethod() + " request for path: " + _request.getPath());
-        if (_request.getMethod() == "GET") {
+        // Normalize request method for dispatch and logging
+        std::string reqMethod = Utils::toUpperCase(_request.getMethod());
+        std::string selLocPath = location ? location->getPath() : std::string("(none)");
+        Logger::debug(std::string("Dispatch: method='") + reqMethod + "' path='" + _request.getPath() + "' selected_location='" + selLocPath + "'");
+        if (reqMethod == "GET") {
             _response = _handleGetRequest(serverBlock, location);
-        } else if (_request.getMethod() == "HEAD") {
+        } else if (reqMethod == "HEAD") {
             _response = _handleGetRequest(serverBlock, location);
-        } else if (_request.getMethod() == "POST") {
+        } else if (reqMethod == "POST") {
             _response = _handlePostRequest(serverBlock, location);
-        } else if (_request.getMethod() == "PUT") {
+        } else if (reqMethod == "PUT") {
             _response = _handlePutRequest(serverBlock, location);
-        } else if (_request.getMethod() == "DELETE") {
+        } else if (reqMethod == "DELETE") {
             _response = _handleDeleteRequest(serverBlock, location);
         } else {
             _response = Response::createErrorResponse(HTTP_NOT_IMPLEMENTED);
+        }
+
+        // Krótkie, ukierunkowane logowanie wyników dispatchu:
+        // pomaga szybko zobaczyć, który handler ustawił status odpowiedzi
+        // (przydatne do debuggingu regresji 501/405 itp.).
+        {
+            int status = _response.getStatusCode();
+            std::string statusStr;
+            if (status == 0) statusStr = "(none/immediate CGI or empty)";
+            else statusStr = Utils::intToString(status);
+            std::string selLocPath = location ? location->getPath() : std::string("(none)");
+            Logger::debug(std::string("Dispatch result: method='") + reqMethod + "' path='" + _request.getPath() + "' status=" + statusStr + " selected_location='" + selLocPath + "'");
         }
 
         // If an asynchronous CGI was spawned above, we switched the
@@ -989,6 +1005,19 @@ Response Client::_handleGetRequest(const Config::ServerBlock& serverConfig, cons
 Response Client::_handlePostRequest(const Config::ServerBlock& serverConfig, const Location* location) {
     (void)serverConfig; // Suppress unused parameter warning
     std::string path = _request.getPath();
+    // If the selected location explicitly forbids POST, return 405 with Allow
+    if (location) {
+        std::string reqMethod = "POST";
+        if (!location->isMethodAllowed(reqMethod)) {
+            Logger::debug("POST not allowed for location '" + location->getPath() + "' - returning 405");
+            Response r = Response::createErrorResponse(HTTP_METHOD_NOT_ALLOWED);
+            const std::vector<std::string>& allowed = location->getAllowedMethods();
+            std::string allowList;
+            for (size_t i = 0; i < allowed.size(); ++i) { if (i) allowList += ", "; allowList += allowed[i]; }
+            if (!allowList.empty()) r.setHeader("Allow", allowList);
+            return r;
+        }
+    }
     
     // Enforce tester rule: /post_body must cap body to 100 bytes
     if (path == "/post_body") {
@@ -1093,7 +1122,7 @@ Response Client::_handlePostRequest(const Config::ServerBlock& serverConfig, con
     }
     
     // For testing purposes, handle simple POST requests
-    if (path.find("demo") != std::string::npos || 
+    if (path == "/" || path.find("demo") != std::string::npos || 
         path.find("test") != std::string::npos ||
         path.find("post_body") != std::string::npos) {
         Response response(HTTP_OK);

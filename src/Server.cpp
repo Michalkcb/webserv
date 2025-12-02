@@ -224,14 +224,21 @@ void Server::_handlePollEvents() {
                 if (client->getSendBuffer().empty()) client->setState(Client::FINISHED);
             } else {
                 // Only perform a single operation per client per poll iteration.
-                // If both POLLIN and POLLOUT are set, prioritize POLLIN (to
-                // make forward progress on parsing). Otherwise handle the one
-                // available event.
-                if (revents & POLLIN) {
+                // If both POLLIN and POLLOUT are set, prefer sending if there
+                // is already data queued to send (so we avoid doing a read AND a
+                // write in the same iteration). Otherwise perform the readable
+                // operation first.
+                bool canSendNow = (revents & POLLOUT) && !client->getSendBuffer().empty();
+                if (canSendNow) {
+                    client->sendData();
+                    clientDidOneOp.insert(client);
+                } else if (revents & POLLIN) {
                     client->receiveData();
                     client->processRequest(_config);
                     clientDidOneOp.insert(client);
                 } else if (revents & POLLOUT) {
+                    // POLLOUT but nothing queued to send: still attempt send
+                    // (some implementations use POLLOUT as an opportunity)
                     client->sendData();
                     clientDidOneOp.insert(client);
                 }
