@@ -271,7 +271,13 @@ bool CGI::execute(const Request& request, const std::string& scriptPath) {
     // Use write() (allowed) instead of dprintf.
     {
         std::string prog = argv[0] ? argv[0] : "(null)";
-        std::string msg = std::string("execve(") + prog + std::string(") failed: ") + strerror(errno) + std::string("\n");
+        const char* dbg = getenv("WEBSERV_DEBUG");
+        std::string msg;
+        if (dbg) {
+            msg = std::string("execve(") + prog + std::string(") failed: ") + strerror(errno) + std::string("\n");
+        } else {
+            msg = std::string("execve(") + prog + std::string(") failed\n");
+        }
         ssize_t w = write(STDERR_FILENO, msg.c_str(), msg.length()); (void)w;
     }
     _exit(127);
@@ -340,7 +346,13 @@ bool CGI::isRunning() const {
 
     int status;
     int result = waitpid(_pid, &status, WNOHANG);
-    Logger::debug("CGI::isRunning() waitpid result=" + Utils::intToString(result) + ", pid=" + Utils::intToString(_pid) + ", errno=" + Utils::intToString(errno));
+    {
+        const char* dbg = getenv("WEBSERV_DEBUG");
+        std::ostringstream ss;
+        ss << "CGI::isRunning() waitpid result=" << result << ", pid=" << _pid;
+        if (dbg) ss << ", errno=" << errno;
+        Logger::debug(ss.str());
+    }
     if (result == _pid) { // child transitioned to a waited state
         if (WIFEXITED(status)) {
             int code = WEXITSTATUS(status);
@@ -355,7 +367,12 @@ bool CGI::isRunning() const {
         return false;
     }
     if (result == -1) { // error => treat as finished
-        Logger::debug("CGI::isRunning(): waitpid error: " + std::string(strerror(errno)));
+        const char* dbg = getenv("WEBSERV_DEBUG");
+        if (dbg) {
+            Logger::debug(std::string("CGI::isRunning(): waitpid error: ") + std::string(strerror(errno)));
+        } else {
+            Logger::debug("CGI::isRunning(): waitpid error");
+        }
         const_cast<CGI*>(this)->_isRunning = false;
         return false;
     }
@@ -469,7 +486,12 @@ int CGI::waitForCompletion() {
     }
     if (res == -1) {
         // Error from waitpid: treat as finished but report failure.
-        Logger::debug(std::string("CGI::waitForCompletion(): waitpid error: ") + std::string(strerror(errno)) + " pid=" + Utils::intToString(_pid));
+        const char* dbg = getenv("WEBSERV_DEBUG");
+        if (dbg) {
+            Logger::debug(std::string("CGI::waitForCompletion(): waitpid error: ") + std::string(strerror(errno)) + " pid=" + Utils::intToString(_pid));
+        } else {
+            Logger::debug("CGI::waitForCompletion(): waitpid error pid=" + Utils::intToString(_pid));
+        }
         _isRunning = false;
         int saved_pid = _pid;
         _pid = -1;

@@ -8,9 +8,14 @@ int main() {
     // Start timing
     auto start = std::chrono::high_resolution_clock::now();
 
-    // Optional: log to file
-    std::ofstream log("cgi_debug.log", std::ios::app);
-    log << "=== CGI Execution Started ===\n";
+    // Optional: log to file only when explicitly enabled by env var
+    bool do_log = false;
+    if (getenv("WEBSERV_DEBUG_LOG_TO_FILE") != NULL) do_log = true;
+    std::ofstream log;
+    if (do_log) {
+        log.open("cgi_debug.log", std::ios::app);
+        log << "=== CGI Execution Started ===\n";
+    }
 
     // Print required CGI headers
     std::cout << "Status: 200 OK\r\n";
@@ -35,7 +40,7 @@ int main() {
     }
     size_t content_length = content_length_str ? std::atoi(content_length_str) : 0;
 
-    log << "Expected content length: " << content_length << "\n";
+    if (do_log) log << "Expected content length: " << content_length << "\n";
 
     size_t total_read = 0;
     std::vector<char> buffer(8192);
@@ -43,7 +48,7 @@ int main() {
         total_read += buffer.size();
     }
     total_read += std::cin.gcount(); // final chunk
-    log << "Actual bytes read from stdin: " << total_read << "\n";
+    if (do_log) log << "Actual bytes read from stdin: " << total_read << "\n";
 
     // Special case for 100MB test
     if (content_length == 100000000) {
@@ -65,14 +70,16 @@ int main() {
         }
         std::string output = std::string(var) + ": " + (val ? val : "undefined") + "\n";
         std::cout << output;
-        log << output;
+        if (do_log) log << output;
     }
 //*/
     // End timing
     auto end = std::chrono::high_resolution_clock::now();
     auto duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-    log << "Execution time: " << duration_ms << " ms\n";
-    log << "=== CGI Execution Finished ===\n\n";
+    if (do_log) {
+        log << "Execution time: " << duration_ms << " ms\n";
+        log << "=== CGI Execution Finished ===\n\n";
+    }
 
     // Output summary to client
 //    std::cout << "CGI debug complete.\n";

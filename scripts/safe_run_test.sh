@@ -92,12 +92,16 @@ fi
 # Give a short grace period for logs to flush
 sleep 1
 
-# Copy/rotate logs for inspection
-if [ -f "$LIFECYCLE_LOG" ]; then
-  cp "$LIFECYCLE_LOG" "$OUT_DIR/cgi_lifecycle_${TIMESTAMP}.log"
-  echo "Copied lifecycle log -> $OUT_DIR/cgi_lifecycle_${TIMESTAMP}.log"
+# Copy/rotate logs for inspection (only when diagnostics explicitly enabled)
+if [ -n "$WEBSERV_ENABLE_DIAG" ]; then
+  if [ -f "$LIFECYCLE_LOG" ]; then
+    cp "$LIFECYCLE_LOG" "$OUT_DIR/cgi_lifecycle_${TIMESTAMP}.log"
+    echo "Copied lifecycle log -> $OUT_DIR/cgi_lifecycle_${TIMESTAMP}.log"
+  else
+    echo "No cgi_lifecycle.log found (diagnostic logging enabled but file missing)."
+  fi
 else
-  echo "No cgi_lifecycle.log found (diagnostic logging disabled)." 
+  echo "Diagnostic log copy skipped (set WEBSERV_ENABLE_DIAG=1 to enable)."
 fi
 
 # Stop webserv that we started (best-effort)

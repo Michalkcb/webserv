@@ -96,7 +96,11 @@ void Server::run() {
 
         if (poll_count < 0) {
             if (errno == EINTR) continue; // Interrupted by a signal, continue looping
-            Logger::error("poll() failed: " + std::string(strerror(errno)));
+                {
+                    const char* dbg = getenv("WEBSERV_DEBUG");
+                    if (dbg) Logger::error(std::string("poll() failed: ") + std::string(strerror(errno)));
+                    else Logger::error("poll() failed");
+                }
             break; // Exit on critical poll error
         }
         _checkCgiCompletion();
@@ -323,7 +327,9 @@ void Server::_acceptNewConnection(int serverSocket) {
     int clientSocket = accept(serverSocket, (struct sockaddr*)&clientAddr, &clientAddrLen);
     if (clientSocket < 0) {
         if (errno != EAGAIN && errno != EWOULDBLOCK) {
-            Logger::error("Failed to accept connection: " + std::string(strerror(errno)));
+            const char* dbg = getenv("WEBSERV_DEBUG");
+            if (dbg) Logger::error(std::string("Failed to accept connection: ") + std::string(strerror(errno)));
+            else Logger::error("Failed to accept connection");
         }
         return;
     }
