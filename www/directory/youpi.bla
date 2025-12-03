@@ -1,13 +1,19 @@
 #!/bin/sh
 # simple CGI that echoes stdin back EXACTLY
-# Read all stdin to a temp file
-TMPFILE=$(mktemp /tmp/youpi_stdin.XXXXXX)
-cat > "$TMPFILE"
-L=$(wc -c < "$TMPFILE" | tr -d ' ')
-
-# Always return exactly what was received; Content-Length must match input size
-printf "Status: 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %s\r\n\r\n" "$L"
-cat "$TMPFILE"
-
-rm -f "$TMPFILE"
-exit 0
+# Default safe behavior: stream stdin to stdout without creating files unless debug is enabled.
+if [ -n "$WEBSERV_DEBUG_CGI" ]; then
+	# Debug mode: persist stdin to a temp file for local inspection.
+	TMPFILE=$(mktemp /tmp/youpi_stdin.XXXXXX)
+	cat > "$TMPFILE"
+	L=$(wc -c < "$TMPFILE" | tr -d ' ')
+	# Always return exactly what was received; Content-Length must match input size
+	printf "Status: 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %s\r\n\r\n" "$L"
+	cat "$TMPFILE"
+	rm -f "$TMPFILE"
+	exit 0
+else
+	# Safe evaluation mode: do not create files on disk.
+	printf "Status: 200 OK\r\nContent-Type: text/plain\r\n\r\n"
+	cat -
+	exit 0
+fi
