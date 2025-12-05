@@ -1,0 +1,126 @@
+**Szczegółowy plan (co i w jakiej kolejności tworzyć / zmieniać)**
+
+Poniżej znajdziesz precyzyjny, krok‑po‑kroku plan implementacji projektu od zera aż do funkcjonalnego stanu obecnego repo. Dla każdego kroku: plik(y) do dodania/edytowania, kluczowe funkcje/metody i testy, które należy wykonać po skończeniu kroku.
+
+**Krok 0 — środowisko i pliki pomocnicze**
+- Pliki: `Makefile`, `config/default.conf`, katalog `www/` z przykładowymi CGI i statycznymi plikami.
+- Cel: mieć prosty `Makefile` budujący binarkę `webserv` oraz katalog `www` z testowymi skryptami.
+
+**Krok 1 — `main.cpp` i klasa `Server` (szkielet)**
+- Plik do dodać: `src/main.cpp`.
+- Co robi `main()`:
+   - tworzy obiekt `Server server(configFile)`;
+   - wywołuje `server.start(); server.run(); server.stop();` w try/catch;
+   - reaguje na sygnały (`SIGINT`/`SIGTERM`) żeby ustawić flagę stopu.
+- Kluczowe metody w `Server` (plik `src/Server.cpp`, nagłówek `include/Server.hpp`):
+   - `Server(const std::string& configFile)` — załaduj konfigurację;
+   - `void start()` — przygotuj sockety i ustaw `_running = true`;
+   - `void run()` — główna pętla poll();
+   - `void stop()` i `_cleanup()` — zamykanie socketów i klientów.
+- Po implementacji: `make`, uruchom `./webserv config/default.conf` i sprawdź, że proces działa (ps/ss/ lsof na porcie).
+
+**Krok 2 — `Config` (parser konfiguracji)**
+- Pliki: `include/Config.hpp`, `src/Config.cpp`.
+- Kluczowe funkcje:
+   - `void loadConfig(const std::string& filename)` — wczytaj i sparsuj bloki serwerów;
+   - `std::vector<ServerBlock> getServers() const` — zwraca vector konfiguracji;
+   - `static std::string getHost(const ServerBlock&)`, `static int getPort(const ServerBlock&)`.
+- Testy: załaduj `tester_config.conf` i sprawdź, że `Server::_setupServerSockets()` otrzymuje poprawną listę server blocks.
+
+**Krok 3 — tworzenie i konfiguracja socketów nasłuchujących**
+- Plik: `src/Server.cpp` (`_createServerSocket`, `_setupServerSockets`).
+- Kluczowe kroki:
+   - `getaddrinfo()` dla host:port;
+   - `socket()` -> `setsockopt(SO_REUSEADDR)` -> `Utils::setNonBlocking(fd)` -> `bind()` -> `listen()`;
+   - rejestracja socketów w wewnętrznym wektorze `_serverSockets` oraz mapowanie portów `_listenerPort`.
+- Test: `ss -ltnp | grep 8080` potwierdza nasłuchiwanie.
+
+**Krok 4 — struktura `Client` i stany**
+- Plik: `include/Client.hpp`, `src/Client.cpp`.
+- Kluczowe pola `Client`:
+   - `int _fd; std::string _recvBuffer; std::string _sendBuffer; enum State _state; CGI* _cgi;` itd.
+- Kluczowe metody:
+   - `void receiveData()` — czyta z soketu do `_recvBuffer` (non-blocking read);
+   - `void sendData()` — wysyła z `_sendBuffer` na soket (non-blocking write);
+   - `void processRequest(const Config&)` — jeśli request kompletny, parsuje i przygotowuje odpowiedź lub uruchamia CGI;
+   - `void markPeerClosed()`, `void close()` — oznaczanie zakończenia po stronie peer.
+- Test: prosty `curl GET /` i sprawdź odpowiedź; symulacja partial request (wysłanie nagłówków w kawałkach) powinna być obsłużona.
+
+**Krok 5 — pętla `poll()` i dispatch w `Server::run()`**
+- Plik: `src/Server.cpp`:
+   - `void _updatePollFds()` — buduje tablicę `struct pollfd` zawierającą wszystkie listenery, klienty i potoki CGI;
+   - `void _handlePollEvents()` — iteruje po revents i dla każdego ownera wywołuje odpowiednie metody `Client`.
+- Najważniejsze zasady implementacyjne:
+   - Utrzymuj `std::set<Client*> clientDidOneOp` by zrealizować "tylko jedna operacja I/O na klienta na iterację";
+   - Dla klientów preferuj `send()` jeśli jest coś w `_sendBuffer`, inaczej `receiveData()` na POLLIN;
+   - Obsłuż `POLLHUP`/`POLLERR` ostrożnie: spróbuj wysłać resztę sendBuffer, potem zamknij.
+- Test: jednoczesne wiele połączeń (abtest) lub `./ubuntu_tester` — wszystkie krótkie testy muszą przechodzić.
+
+**Krok 6 — parser żądania (`Request`) i generator odpowiedzi (`Response`)**
+- Pliki: `include/Request.hpp`, `src/Request.cpp`, `include/Response.hpp`, `src/Response.cpp`.
+- Kluczowe funkcje `Request`:
+   - `bool appendData(const char* data, size_t len)` — dodaje dane i próbuje sparsować nagłówki oraz body;
+   - `bool isComplete()` — czy żądanie jest kompletne (nagłówki i body zgodnie z Content-Length lub chunked);
+   - `std::string getHeader(const std::string& name)`;
+- Kluczowe funkcje `Response`:
+   - `void setStatus(int code, const std::string& reason)`;
+   - `void setHeader(const std::string&, const std::string&)`;
+   - `std::string toBytes()` — serializuje nagłówki + body do `_sendBuffer`.
+- Test: ręczne wysyłanie fragmentowanych nagłówków i body; sprawdź, że `isComplete()` działa dla różnych kombinacji.
+
+**Krok 7 — integracja CGI**
+- Plik: `src/CGI.cpp`, nagłówek `include/CGI.hpp`.
+- Kluczowe metody `CGI`:
+   - `bool execute(const Request&, const std::string& scriptPath)` — tworzy pipe'y, fork() i execve(); ustawia `_inputFd` i `_outputFd` non-blocking;
+   - `ssize_t writeToInput(const char* data, size_t len)` — zapisuje do stdin procesu CGI (non-blocking); nie zależ na errno do decyzji;
+   - `ssize_t readFromOutput(char* buffer, size_t size)` — czyta z stdout procesu CGI (non-blocking);
+   - `bool isRunning()` / `int waitForCompletion()` — non-blocking waitpid(WNOHANG) i reaping;
+   - `void terminate()` / `void closeInput()` — zamykanie potoków i kill jeśli potrzebne.
+- Inne: `_setupEnvironment(const Request&)` — przygotowuje env vars CGI (CONTENT_LENGTH, SCRIPT_FILENAME, HTTP_...);
+- Test: uruchom CGI prosty (np. `www/cgi-bin/hello.py`) i sprawdź nagłówki i body; testuj z małymi i dużymi body.
+
+**Krok 8 — połączenie Client <-> CGI (sterowanie przepływem)**
+- Mechanika:
+   - Gdy request wymaga CGI i ma body, `Client::processRequest()` wywołuje `CGI::execute()` i ustawia klienta w stanie oczekiwania na zapis do CGI (`isWaitingForCgiWrite()`);
+   - W `_handlePollEvents()` monitorujemy FD CGI input (POLLOUT) i output (POLLIN) i wywołujemy `client->handleCgiInput()` i `client->handleCgiOutput()`;
+   - `handleCgiInput()` odczytuje z `Request` (lub bufora) i przekazuje `CGI::writeToInput()`; jeżeli brak miejsca — przerwij i poczekaj na POLLOUT;
+   - `handleCgiOutput()` czyta z `CGI::readFromOutput()` i dopisuje do `Client::_sendBuffer` (albo bufora odpowiedzi); wysyłka klientowi następuje w kolejnych iteracjach gdy POLLOUT.
+- Zasady: nie robić więcej niż jednego read/write na klienta w pętli poll.
+
+**Krok 9 — finalizacja odpowiedzi i sprzątanie**
+- Gdy CGI zakończy (waitpid dla pid zwróci status), konstrukcja odpowiedzi powinna być zakończona:
+   - Zamknij `_inputFd`, odczytaj resztę stdout aż otrzymasz EOF (read() == 0) lub waitpid z informacją o zakończeniu;
+   - Zbuduj nagłówki (jeśli CGI zwrócił nagłówki) i umieść treść w `_sendBuffer` klienta;
+   - Markuj klienta FINISHED gdy sendBuffer pusty i peer zamknięty.
+
+**Krok 10 — Logger, diagnostyka i debug env vars**
+- Plik: `include/Logger.hpp`, `src/Logger.cpp`.
+- Funkcje: `Logger::info()`, `Logger::debug()`, `Logger::error()`, `Logger::warn()`.
+- Diagnostyka do plików powinna być warunkowana zmiennymi środowiskowymi (`WEBSERV_DEBUG_CGI`, `WEBSERV_DEBUG_LOG_TO_FILE`, `WEBSERV_ENABLE_DIAG`) by nie tworzyć plików na dysku podczas oceny.
+
+**Kluczowe funkcje (lista referencyjna z krótkim opisem)**
+- `Server::run()` — główna pętla, poll(), wywołuje `_updatePollFds()` i `_handlePollEvents()`;
+- `Server::_updatePollFds()` — buduje tablicę `pollfd` i powiązane `owner` pointers;
+- `Server::_handlePollEvents()` — dyspozycja zdarzeń: accept, delegowanie do klienta/CGI; utrzymuje zasadę "jedno I/O na klienta na iterację";
+- `Server::_acceptNewConnection(int serverSocket)` — `accept()` i tworzenie `Client`;
+- `Client::receiveData()` — read() z non-blocking socket do `_recvBuffer` i parsowanie requesta;
+- `Client::sendData()` — write() z `_sendBuffer` na soket; aktualizacja stanu;
+- `Client::processRequest(const Config&)` — parsuje request, rozstrzyga czy serwować plik czy uruchomić CGI; przygotowuje `Response` lub wywołuje `CGI::execute()`;
+- `Client::handleCgiInput()` / `Client::handleCgiOutput()` — przesyłanie body do CGI i odczyt z CGI stdout;
+- `Client::finalizeCgiResponse()` — zakończenie procesu CGI, budowa finalnej odpowiedzi HTTP i przygotowanie danych do wysłania;
+- `CGI::execute()` — tworzy pipe'y, fork(), chdir do katalogu, execve() interpreter/handler;
+- `CGI::writeToInput()` — non-blocking write do stdin procesu CGI (zwraca liczbę zapisanych bajtów lub -1 przy braku postępu);
+- `CGI::readFromOutput()` — non-blocking read z stdout procesu CGI;
+- `CGI::isRunning()` / `CGI::waitForCompletion()` — sprawdzanie stanu child process bez blokowania;
+- `Utils::setNonBlocking(int fd)` — ustawia O_NONBLOCK na fd;
+- `Utils::fileExists(const std::string&)`, `Utils::getFileExtension()` — pomocnicze.
+
+**Checklisty do testów po każdym etapie**
+- Po kroku 1: `make`, `./webserv config/default.conf` uruchamia się i nie crashuje.
+- Po kroku 3: `ss -ltnp` pokazuje nasłuchiwanie; `telnet 127.0.0.1 8080` łączy się i nie blokuje.
+- Po kroku 4/5: `curl GET /` zwraca prostą stronę; obsługa wielu prostych klientów.
+- Po kroku 7/8: `curl -X POST /cgi-bin/test` z małym i dużym body; sprawdź, czy CGI otrzymuje całość body i zwraca oczekiwaną treść.
+
+---
+
+Jeżeli chcesz, w kolejnym kroku rozwinę szczegółowo wybraną funkcję (np. `Client::receiveData()` lub `CGI::execute()`), włącznie z checklistą testów jednostkowych i przykładami wejścia/wyjścia. Napisz, którą funkcję chcesz rozebrać na części pierwsze.
