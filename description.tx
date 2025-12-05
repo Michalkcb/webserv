@@ -1,6 +1,6 @@
 **Szczegółowy plan (co i w jakiej kolejności tworzyć / zmieniać)**
 
-Poniżej znajdziesz precyzyjny, krok‑po‑kroku plan implementacji projektu od zera aż do funkcjonalnego stanu obecnego repo. Dla każdego kroku: plik(y) do dodania/edytowania, kluczowe funkcje/metody i testy, które należy wykonać po skończeniu kroku.
+
 
 **Krok 0 — środowisko i pliki pomocnicze**
 - Pliki: `Makefile`, `config/default.conf`, katalog `www/` z przykładowymi CGI i statycznymi plikami.
@@ -123,4 +123,107 @@ Poniżej znajdziesz precyzyjny, krok‑po‑kroku plan implementacji projektu od
 
 ---
 
-Jeżeli chcesz, w kolejnym kroku rozwinę szczegółowo wybraną funkcję (np. `Client::receiveData()` lub `CGI::execute()`), włącznie z checklistą testów jednostkowych i przykładami wejścia/wyjścia. Napisz, którą funkcję chcesz rozebrać na części pierwsze.
+
+**A) Szczegółowy walkthrough:  i **
+
+Cel: zrozumieć dokładnie jak klient odbiera dane, parsuje żądanie oraz inicjuje CGI lub generuje odpowiedź.
+
+1) Wejście: zdarzenie POLLIN na gnieździe klienta (w ).
+2)  — działania krok po kroku:
+   - alokuj bufor tymczasowy (np. char buf[8192]);
+   - wykonuj pętlę non-blocking read():
+       - ssize_t n = ::read(_fd, buf, sizeof(buf));
+       - jeśli n > 0: append do  (std::string) i kontynuuj pętlę — możesz odczytać wielokrotnie dopóki read zwraca >0, ale pamiętaj o limicie jednej operacji klienta na iterację: w implementacji tu odczyt liczby bajtów traktujemy jako jedną operację, nawet jeśli pętlę wykonujemy wewnętrznie dla maksymalnej przepustowości.
+       - jeśli n == 0: peer zamknął zapis; oznacz  i ewentualnie ustaw flagę, że więcej danych nie będzie przychodzić.
+       - jeśli n == -1: nie interpretuje errno; traktuj jako brak postępu — przerwij pętlę i wróć do pętli głównej (czekaj na następny POLLIN/POLLOUT).
+   - po dołączeniu nowych danych, spróbuj sparsować request:  lub wywołaj  bezpośrednio jeśli append wyraźnie zakończył request.
+
+3) Parsowanie częściowe:
+   -  powinien rozdzielać nagłówki od ciała (szuka sekwencji rnrn). Jeśli nie ma kompletnego headeru,  -> false i oczekujemy kolejnego POLLIN.
+   - jeśli header jest kompletny i  jest obecny, czekaj aż otrzymasz odpowiednią liczbę bajtów w body.
+   - jeśli , implementuj minimalne dekodowanie chunked (najpierw rozmiar chunku, potem chunk data). Alternatywnie: odmów chunked (zwróć 501/400), ale tester może wymagać obsługi.
+
+4)  — co robi po wykryciu kompletnego requestu:
+   - parsuje metodę (GET/POST/PUT/DELETE) i URI; wybiera  w konfiguracji () na podstawie hosta i ścieżki;
+   - rozstrzyga czy zasób jest statyczny (plik), katalog (autoindex) czy CGI (.bla lub skojarzone rozszerzenie/interpreter);
+   - jeśli statyczny: odczytaj plik (używaj  i ), ustaw  z odpowiednim  i ; w przypadku błędu zwróć 404/403/500.
+   - jeśli CGI: przygotuj :
+       - ustaw  i  (handler) oraz wywołaj ;
+       - jeśli  zwróci true i CGI ma stdin (hasBody), zmień stan klienta na oczekiwanie zapisu do CGI i zarejestruj monitorowanie POLLOUT na CGI input fd;
+       - jeśli CGI nie oczekuje body, możesz natychmiast monitorować CGI stdout (POLLIN) i zacząć czytać.
+   - jeśli odpowiedź ma body od razu (statyczny plik), serializuj  do  i ustaw klienta w stanie SENDING_RESPONSE; upewnij się, że w  wystawiasz POLLOUT dla gniazda klienta.
+
+5) Edge-cases i odporność:
+   - klient może wysłać wielokrotne pipelined requests w jednym połączeniu — po wysłaniu odpowiedzi nie zamykaj natychmiast jeśli nagłówek  jest obecny; zachowaj pozostałe dane w  i spróbuj przetworzyć następny request.
+   - ogranicz maksymalną długość nagłówków i body (konfiguracja maxBody), aby unikać OOM.
+   - w przypadku błędu parsowania: zwróć 400 i zamknij połączenie;
+
+6) Testy jednostkowe / integracyjne:
+   - fragmentowany request: wysyłaj nagłówki w dwóch częściach (np.  -> sleep -> 
+
+), sprawdź że serwer odpowiada poprawnie.
+   - pipelining: wysyłaj dwa krótkie GET w jednym połączeniu i sprawdź obie odpowiedzi.
+
+**B) Szczegółowy walkthrough:  i lifecycle CGI (child + parent)**
+
+Cel: opisać precyzyjnie jakie kroki wykonywać przy uruchomieniu CGI, jakie FD rejestrować, jak obsługiwać błędy i jak synchronizować z główną pętlą.
+
+1) Przygotowania przed fork():
+   - stwórz pipey: ;
+   - ustaw w planie: parent będzie pisał do  (stdin child), czytał z  (stdout child);
+   - nie zmieniaj trybu pipeów przed fork; po fork ustaw FD non-blocking w parentzie.
+
+2) Budowa zmiennych środowiskowych: 
+   - wypełnij mapę  kluczami: , , ,  (jeśli znane), , , , , , , , oraz  nagłówki (HTTP_X_SECRET_HEADER_FOR_TEST itp.).
+   - skonstruuj  (null-terminated) do przekazania do .
+
+3) fork():
+   - 
+   - jeżeli : zwróć false (log error) i zamknij pipey po obu stronach;
+
+4) W childzie (pid == 0):
+   - zamknij niepotrzebne końce pipe: close(inPipe[1]); close(outPipe[0]);
+   - ;
+   - przekieruj  do  lub do pliku debugowego warunkowanego ;
+   - wykonaj  do katalogu skryptu (gorąco zalecane dla interpreterów);
+   - zbuduj :
+       - gdy .bla mapowane do handlera: argv[0]=basename(handler), argv[1]=scriptPath;
+       - gdy jest interpreter (np. php-cgi): argv = { interpreter, -f, scriptBase } lub { interpreter, scriptBase } wg potrzeb;
+   -  — jeśli execve zwróci, zapisz krótką informację na stderr (np. execve failed) i `_exit(127)`.
+
+5) W parentzie (pid > 0):
+   - zamknij niepotrzebne końce pipe: `close(inPipe[0]); close(outPipe[1]);`
+   - ustaw `_inputFd = inPipe[1]; _outputFd = outPipe[0];` i wywołaj `fcntl(..., O_NONBLOCK)` na obu FD;
+   - ustaw `_pid = pid; _isRunning = true; _startTime = time(NULL);` i inne identyfikatory;
+   - zarejestruj pair (fd/owner) w `Server::_updatePollFds()` tak by `_outputFd` było monitorowane na POLLIN (czytać stdout CGI), a `_inputFd` na POLLOUT gdy są dane do przesłania do CGI.
+
+6) Zapis body do CGI (w trakcie działania): `CGI::writeToInput()`
+   - implementacja powinna pisać ile może (non-blocking write), aktualizować `_lastOutputTime` i zwracać liczbę zapisanych bajtów;
+   - jeśli write zwraca -1 lub 0 (bez postępu), nie wyciągaj logicznych wniosków z `errno` — traktuj jako tymczasowy brak postępu i spróbuj ponownie po kolejnym POLLOUT;
+   - po zapisaniu całego body zamknij `_inputFd` (close) by child otrzymał EOF i zaczął się finalizować.
+
+7) Czytanie stdout CGI: `CGI::readFromOutput()`
+   - czytaj non-blocking do tymczasowego bufora, appenduj do bufora odpowiedzi klienta (albo do wewnętrznego bufora CGI), aktualizuj `_totalBytesRead` i `_lastOutputTime`;
+   - gdy read zwraca 0: EOF — oznacza że child zamknął stdout; połącz to z `waitpid()` by dowiedzieć się o statusie child.
+
+8) Finalizacja i reaping procesu
+   - `CGI::isRunning()` używa `waitpid(_pid, &status, WNOHANG)` — gdy child zakończony, zaktualizuj `_isRunning=false` i dalej przetwórz exit status;
+   - `CGI::waitForCompletion()` zwraca exit code (lub -1 przy błędzie); jeśli błąd, loguj ale nie używaj errno do sterowania — tylko do debug gdy `WEBSERV_DEBUG` is set;
+   - po zakończeniu: buduj finalną odpowiedź (jeśli CGI zwrócił nagłówki, parsuj je), przenieś treść do `Client::_sendBuffer` i ustaw klienta w stanie SENDING_RESPONSE.
+
+9) Błędy i bezpieczne zachowanie
+   - nigdy nie blokuj na `waitpid()` — używaj WNOHANG w pętli poll;
+   - nie używaj `perror` lub `strerror(errno)` w logice produkcyjnej — tylko pod warunkiem debug;
+   - zamykaj FD zawsze w obu procesach (child i parent) odpowiednio po fork/exec lub przy błędzie;
+
+10) Testy i scenariusze kontrolne
+   - prosty CGI echo: wykonaj `echo "hello" | REQUEST_METHOD=POST CONTENT_LENGTH=5 ./cgi_test` by zweryfikować że handler otrzymuje body;
+   - integracyjny: `curl -X POST --data-binary @file_100MB.bin http://127.0.0.1:8080/directory/youpi.bla` — sprawdź, że serwer nie przerywa połączenia i że CGI dostaje pełne body lub poprawnie reaguje na EOF;
+   - test błędów execve: ustaw ścieżkę handlera na nieistniejącą binarkę i sprawdź, że child zakończył się z kodem 127, parent zareagował i serwer nie zawiesił się.
+
+---
+
+Gotowe — dodałem szczegółowe instrukcje A i B do pliku `description.tx`. Jeśli chcesz, mogę teraz:
+- wykonać krok 1 z checklisty i pokazać przykładową implementację `Client::receiveData()` w stylu tego repozytorium (kod C++98), lub
+- napisać krótki skrypt testowy (bash) do symulacji fragmentowanego requesta i testu 100MB POST.
+
