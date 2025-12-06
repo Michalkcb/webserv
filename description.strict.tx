@@ -1,0 +1,72 @@
+Krok 0 — Środowisko i przygotowanie
+- Pliki: `Makefile`, katalogi `src/`, `include/`, `www/`, `config/default.conf`, `tester_config.conf`.
+- Cel: przygotować środowisko do budowy i uruchomienia `webserv` oraz mieć katalog `www/` z plikami statycznymi i skryptami CGI.
+- Sprawdź: interpretery (python/php) wymagane przez CGI, prawa do katalogu `www/`.
+- Komenda: `make` (lub `make -j2`) — sprawdź, że powstała binarka `webserv`.
+
+Krok 1 — `main` i `Server` (inicjalizacja)
+- `src/main.cpp`: tworzy `Server(config)` i wywołuje `start(); run(); stop();`.
+- `Server::start()`: ładuje konfigurację i uruchamia `_setupServerSockets()`.
+- `Server::run()`: główna pętla oparta na `poll()` wywołująca `_updatePollFds()` i `_handlePollEvents()`.
+- `Server::stop()` / `_cleanup()`: zamyka sockety i klientów.
+- Test: `./webserv config/default.conf` — proces powinien działać i nasłuchiwać portu.
+
+Krok 2 — Konfiguracja (`Config`)
+- Pliki: `include/Config.hpp`, `src/Config.cpp`.
+- Zadanie: sparsować konfigurację do `ServerBlock`ów (host, port, root, location, cgi mappings) i walidować ustawienia (np. unikatowe host:port, `client_max_body_size`).
+- Test: załaduj `tester_config.conf` i sprawdź, że sockety są tworzone według konfiguracji.
+
+Krok 3 — Tworzenie socketów nasłuchujących
+- Plik: `src/Server.cpp` (`_createServerSocket`, `_setupServerSockets`).
+- Operacje: `getaddrinfo()` → `socket()` → `setsockopt(SO_REUSEADDR)` → `Utils::setNonBlocking(fd)` → `bind()` → `listen()`.
+- Test: `ss -ltnp | grep 8080`; `curl GET /`.
+
+Krok 4 — Model klienta (`Client`) i przetwarzanie requestów
+- Pliki: `include/Client.hpp`, `src/Client.cpp`.
+- Najważniejsze pola: `int _fd; std::string _recvBuffer; std::string _sendBuffer; enum State _state; CGI* _cgi;`.
+- Ważne metody: `receiveData()`, `sendData()`, `processRequest()`, `handleCgiInput()`, `handleCgiOutput()`, `finalizeCgiResponse()`, `close()`.
+
+Szczegóły `Client::receiveData()`:
+- Wywoływane na POLLIN; użyj `char buf[8192]` i non-blocking `read()` w pętli, append do `_recvBuffer`.
+- Jeśli `read() == 0`: oznacz `peerClosed`.
+- Jeśli `read() == -1`: przerwij czytanie i zaczekaj na kolejne zdarzenie (nie zmieniaj logiki na podstawie `errno`).
+- Po dołączeniu danych: `Request::appendData()`; gdy `isComplete()` -> `processRequest()`.
+
+Krok 5 — Parser `Request` i `Response`
+- Pliki: `include/Request.hpp`, `src/Request.cpp`, `include/Response.hpp`, `src/Response.cpp`.
+- `Request::appendData()` wyszukuje `\r\n\r\n` i obsługuje `Content-Length`; opcjonalnie dekoduje `chunked` jeśli potrzebne.
+- `Response::toBytes()` serializuje odpowiedź HTTP do `_sendBuffer`.
+
+Krok 6 — Pętla zdarzeń: `poll()` i dispatch
+- `Server::_updatePollFds()` buduje `pollfd` dla listenerów, klientów i CGI FDs.
+- `Server::_handlePollEvents()` przetwarza revents: accept, POLLIN/POLLOUT klientów i CGI.
+- Reguła: maksymalnie jedna operacja I/O (read lub write) na klienta na iterację; stosuj `clientDidOneOp`.
+
+Krok 7 — Integracja CGI: `CGI::execute()` i lifecycle
+- `CGI::execute()` tworzy `pipe(inPipe)`, `pipe(outPipe)` i `fork()`.
+- W childzie: zamknij niepotrzebne końce, `dup2()` stdin/stdout, opcjonalnie kieruj stderr do `/dev/null` (lub pliku gdy debug), `chdir()` do skryptu, `execve()` handlera.
+- W parentzie: zamknij niepotrzebne końce, ustaw `_inputFd`, `_outputFd` non-blocking, zarejestruj POLLOUT/POLLIN.
+- `CGI::_setupEnvironment()` buduje `envp` z `REQUEST_METHOD`, `CONTENT_LENGTH`, `SCRIPT_FILENAME`, `HTTP_*` itp.
+- `writeToInput()` i `readFromOutput()` muszą być non-blocking; nie podejmuj decyzji sterujących na podstawie `errno`.
+- Reaping: `waitpid(_pid, &status, WNOHANG)` okresowo; po zakończeniu ustaw `_isRunning=false`.
+
+Krok 8 — Połączenie Client <-> CGI (flow)
+- `Client::processRequest()` uruchamia CGI; `handleCgiInput()` przesyła body do `CGI::writeToInput()` (non-blocking), `handleCgiOutput()` czyta stdout CGI i dopisuje do `_sendBuffer`.
+- Jeśli zapis do CGI nie zakończony — poczekaj na kolejny POLLOUT; zawsze jedna operacja I/O na klienta na iterację.
+
+Krok 9 — Finalizacja odpowiedzi i sprzątanie
+- Po EOF na `_outputFd` i/lub zakończeniu procesu: parsuj nagłówki CGI, przenieś body do `_sendBuffer` i ustaw klienta w stanie wysyłki.
+- Po wysłaniu i zamknięciu peer — zamknij klienta i posprzątaj zasoby.
+- W błędach CGI przygotuj 500 i czytelny log w trybie debug.
+
+Krok 10 — Logger, diagnostyka i scalone uwagi końcowe
+- Pliki: `include/Logger.hpp`, `src/Logger.cpp`, opcjonalnie `cgi_debug.cpp`.
+- Polityka: wszystkie zapisy na dysk i szczegółowe logi powinny być warunkowane zmiennymi: `WEBSERV_DEBUG`, `WEBSERV_DEBUG_CGI`, `WEBSERV_DEBUG_LOG_TO_FILE`.
+- Podczas oceny (en.subject/eval) upewnij się, że debug jest wyłączony; nie tworzyć plików w `/tmp` bez explicite env var.
+- Testy zalecane (podsumowanie):
+  - Build i uruchomienie: `make` → `./webserv config/default.conf`.
+  - Podstawowy GET: `curl GET /`.
+  - Fragmentowany request i pipelining: dwa GET w jednym połączeniu.
+  - CGI małe body, potem duże body (100MB): `curl --data-binary @file_100MB.bin http://127.0.0.1:8080/directory/youpi.bla`.
+
+-- Plik kończy się tutaj — nic po Kroku 10.
