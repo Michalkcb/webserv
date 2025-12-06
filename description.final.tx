@@ -1,0 +1,609 @@
+WEBSERV - PRZEWODNIK PROJEKTU (30 MINUT DO ZROZUMIENIA)
+
+═══════════════════════════════════════════════════════════════════════
+ARCHITEKTURA - CO TO JEST I JAK DZIAŁA
+═══════════════════════════════════════════════════════════════════════
+
+TO JEST: Single-process, non-blocking HTTP/1.1 server z CGI support
+JĘZYK: C++98 (strict compliance)
+I/O MODEL: poll() + non-blocking sockets
+CGI MODEL: fork/exec + pipes
+
+STRUKTURA KATALOGÓW:
+  src/        - implementacje (.cpp)
+  include/    - nagłówki (.hpp)
+  www/        - document root (pliki statyczne + cgi-bin/)
+  config/     - pliki konfiguracyjne
+
+GŁÓWNE KLASY:
+  Server   - pętla zdarzeń, zarządza socketami i klientami
+  Client   - reprezentuje jedno połączenie HTTP
+  Config   - parsuje i przechowuje konfigurację
+  Request  - parsuje żądanie HTTP
+  Response - buduje odpowiedź HTTP
+  CGI      - obsługuje wykonanie skryptów CGI
+
+═══════════════════════════════════════════════════════════════════════
+KROK 0 — SETUP I KOMPILACJA
+═══════════════════════════════════════════════════════════════════════
+
+MAKEFILE:
+  - TARGET: webserv
+  - FLAGS: -Wall -Wextra -Werror -std=c++98
+  - KOMENDA: make (kompilacja), make clean, make fclean, make re
+
+URUCHOMIENIE:
+  ./webserv config/default.conf
+
+KLUCZOWE ZAŁOŻENIE:
+  Wszystkie file descriptory (sockety, pipes) są NON-BLOCKING.
+  Oznacza to że read/write zwracają natychmiast - jeśli nie ma danych/miejsca
+  to dostajemy errno=EAGAIN i próbujemy ponownie później.
+
+═══════════════════════════════════════════════════════════════════════
+KROK 1 — MAIN I SERVER::START()
+═══════════════════════════════════════════════════════════════════════
+
+PLIK: src/main.cpp
+  - Parsuje argumenty (plik config)
+  - Ustawia handler SIGINT (Ctrl+C → graceful shutdown)
+  - Tworzy obiekt Server
+  - Wywołuje server.start()
+
+KLASA SERVER (include/Server.hpp, src/Server.cpp):
+
+POLA PRYWATNE:
+  _config              - obiekt Config z parsowaną konfiguracją
+  _serverSockets       - vector<int> z listening sockets
+  _clients             - map<int, Client*> aktywne połączenia
+  _pollfds             - vector<pollfd> dla poll()
+  _fdOwner             - map<int, void*> kto jest właścicielem fd
+  _running             - bool, czy serwer działa
+
+METODY PUBLICZNE:
+  start()              - setup socketów, główna pętla
+  stop()               - graceful shutdown
+  run()                - pętla poll() + dispatch
+
+METODY PRYWATNE:
+  _setupServerSockets()    - tworzy listening sockety dla każdego portu
+  _createServerSocket()    - socket() + bind() + listen() dla jednego portu
+  _updatePollFds()         - buduje tablicę pollfd przed każdym poll()
+  _handlePollEvents()      - przetwarza zdarzenia po poll()
+  _acceptNewConnection()   - accept() nowego klienta
+  _cleanupClosedClients()  - usuwa zamknięte połączenia
+
+PRZEPŁYW:
+  1. main() → Server::start()
+  2. start() → _setupServerSockets() (tworzy 1+ listening sockets)
+  3. start() → run() (główna pętla)
+  4. run() w pętli:
+     - _updatePollFds()
+     - poll() - czeka na zdarzenia
+     - _handlePollEvents() - obsługuje zdarzenia
+     - _cleanupClosedClients()
+
+═══════════════════════════════════════════════════════════════════════
+KROK 2 — CONFIG PARSER
+═══════════════════════════════════════════════════════════════════════
+
+PLIK: src/Config.cpp, include/Config.hpp
+
+CO ROBI:
+  Parsuje plik konfiguracyjny w stylu nginx (server blocks, locations)
+
+FORMAT KONFIGURACJI:
+  server {
+      listen 8080;
+      server_name localhost;
+      root /var/www;
+      client_max_body_size 100M;
+      
+      location / {
+          allowed_methods GET POST;
+          index index.html;
+      }
+      
+      location /cgi-bin/ {
+          cgi_pass .py /usr/bin/python3;
+          cgi_pass .bla /path/to/cgi_tester;
+      }
+      
+      location /upload {
+          allowed_methods POST;
+          upload_path /var/www/uploads;
+      }
+      
+      error_page 404 /error_pages/404.html;
+  }
+
+STRUKTURY DANYCH:
+  ServerBlock - przechowuje: port, server_name, root, error_pages, locations
+  Location    - przechowuje: path, allowed_methods, cgiMap, uploadPath, redirect
+
+METODY:
+  Config::parse()           - główna funkcja parsująca plik
+  Config::_parseServerBlock() - parsuje jeden blok server { ... }
+  Config::_parseLocation()    - parsuje jeden blok location { ... }
+  Config::findServer()        - znajduje ServerBlock dla danego Host header
+  Config::findLocation()      - znajduje Location dla danego URI
+
+GDZIE TO JEST UŻYWANE:
+  - Server::start() - parsuje config i przechowuje w _config
+  - Client::processRequest() - używa config.findLocation() do routingu
+
+═══════════════════════════════════════════════════════════════════════
+KROK 3 — SOCKET SETUP I ACCEPT
+═══════════════════════════════════════════════════════════════════════
+
+PLIKI: src/Server.cpp (metody _setupServerSockets, _createServerSocket)
+
+Server::_setupServerSockets():
+  - Iteruje po ServerBlocks z config
+  - Dla każdego unikalnego portu wywołuje _createServerSocket()
+  - Dodaje utworzone sockety do _serverSockets
+
+Server::_createServerSocket(port):
+  1. socket(AF_INET, SOCK_STREAM, 0) - tworzy TCP socket
+  2. setsockopt(SO_REUSEADDR) - pozwala ponownie użyć portu natychmiast
+  3. bind() - przypisuje port
+  4. listen(128) - ustawia w tryb nasłuchiwania (backlog 128)
+  5. Utils::setNonBlocking() - ustawia O_NONBLOCK
+  6. return socket fd
+
+DLACZEGO NON-BLOCKING:
+  Żeby accept() nie blokował. Jeśli nie ma połączenia - zwraca EAGAIN.
+
+Server::_acceptNewConnection(listenerFd):
+  1. accept(listenerFd, ...) - akceptuje nowe połączenie
+  2. Jeśli sukces: tworzy new Client(clientFd, serverBlock)
+  3. Dodaje do _clients[clientFd] = client
+  4. Client już ma socket non-blocking
+
+GDZIE JEST UŻYWANE:
+  - Server::start() wywołuje _setupServerSockets() na początku
+  - Server::_handlePollEvents() wywołuje _acceptNewConnection() gdy POLLIN na listener
+
+═══════════════════════════════════════════════════════════════════════
+KROK 4 — KLASA CLIENT I STAN POŁĄCZENIA
+═══════════════════════════════════════════════════════════════════════
+
+PLIKI: src/Client.cpp, include/Client.hpp
+
+ClientState (enum):
+  RECEIVING_REQUEST   - czytamy dane z socketu
+  PROCESSING_REQUEST  - parsujemy i decydujemy co robić
+  SENDING_RESPONSE    - wysyłamy odpowiedź
+  WAITING_CGI_INPUT   - czekamy żeby wysłać dane do CGI stdin
+  WAITING_CGI_OUTPUT  - czekamy na dane z CGI stdout
+  CLOSING             - do zamknięcia
+
+POLA KLASY CLIENT:
+  _fd                - socket descriptor klienta
+  _state             - aktualny stan (ClientState)
+  _recvBuffer        - string z odebranymi danymi
+  _sendBuffer        - string z danymi do wysłania
+  _sendOffset        - ile już wysłano
+  _request           - obiekt Request* (parsowane żądanie)
+  _response          - obiekt Response* (przygotowana odpowiedź)
+  _cgi               - obiekt CGI* (jeśli używamy CGI)
+  _serverBlock       - wskaźnik do konfiguracji serwera
+  _lastActivity      - timestamp ostatniej aktywności (timeout)
+  _keepAlive         - czy connection: keep-alive
+  _peerClosed        - czy klient zamknął połączenie
+
+METODY:
+  receiveData()         - czyta z socketu do _recvBuffer (non-blocking)
+  sendData()            - wysyła z _sendBuffer do socketu (non-blocking)
+  processRequest()      - routing: static file vs CGI vs upload vs error
+  handleCgiInput()      - wysyła body do CGI stdin
+  handleCgiOutput()     - czyta z CGI stdout
+  finalizeCgiResponse() - parsuje output CGI i buduje response
+  close()               - zamyka socket i sprząta zasoby
+  shouldClose()         - sprawdza czy należy zamknąć (timeout, błąd, etc)
+
+CO SIĘ DZIEJE:
+  1. Nowy klient → _state = RECEIVING_REQUEST
+  2. Przy POLLIN → receiveData() dopisuje do _recvBuffer
+  3. Gdy Request::isComplete() → _state = PROCESSING_REQUEST
+  4. processRequest() decyduje:
+     - Plik statyczny → przygotuj response → _state = SENDING_RESPONSE
+     - CGI → uruchom CGI → _state = WAITING_CGI_INPUT (lub OUTPUT)
+     - Błąd → przygotuj error response → _state = SENDING_RESPONSE
+  5. Przy POLLOUT → sendData() wysyła z _sendBuffer
+  6. Gdy wszystko wysłane:
+     - Keep-alive? → reset stanu → _state = RECEIVING_REQUEST (czekaj na następny request)
+     - Nie? → _state = CLOSING
+
+═══════════════════════════════════════════════════════════════════════
+KROK 5 — REQUEST I RESPONSE PARSING
+═══════════════════════════════════════════════════════════════════════
+
+KLASA REQUEST (src/Request.cpp, include/Request.hpp):
+
+CO PRZECHOWUJE:
+  _method        - GET, POST, DELETE, etc.
+  _uri           - /path?query
+  _httpVersion   - HTTP/1.1
+  _headers       - map<string, string> nagłówków
+  _body          - string z body (dla POST)
+  _complete      - czy request kompletny
+
+METODY:
+  appendData(data)  - dopisuje dane do bufora i parsuje
+  isComplete()      - czy mamy kompletny request
+  getMethod(), getUri(), getHeader(), getBody() - gettery
+
+JAK DZIAŁA PARSOWANIE:
+  1. appendData() jest wywoływane wielokrotnie (dane przychodzą fragmentami)
+  2. Szuka "\r\n\r\n" - separator nagłówków i body
+  3. Parsuje request line: "GET /path HTTP/1.1"
+  4. Parsuje nagłówki (każdy w linii)
+  5. Sprawdza Content-Length - jeśli jest, czeka na body
+  6. Gdy ma wszystko → _complete = true
+
+KLASA RESPONSE (src/Response.cpp, include/Response.hpp):
+
+CO PRZECHOWUJE:
+  _statusCode     - 200, 404, 500, etc.
+  _statusMessage  - "OK", "Not Found", etc.
+  _headers        - map<string, string>
+  _body           - string z body
+
+METODY:
+  setStatus(code, message)
+  setHeader(name, value)
+  setBody(body)
+  toBytes() - serializuje do stringa "HTTP/1.1 200 OK\r\n..."
+
+JAK DZIAŁA:
+  1. Kod tworzy new Response()
+  2. Ustawia status, headery, body
+  3. Wywołuje toBytes() → dostaje string
+  4. String idzie do Client::_sendBuffer
+  5. Client::sendData() wysyła to do socketu
+
+═══════════════════════════════════════════════════════════════════════
+KROK 6 — PĘTLA POLL() I DISPATCH
+═══════════════════════════════════════════════════════════════════════
+
+PLIKI: src/Server.cpp (metody run, _updatePollFds, _handlePollEvents)
+
+CO TO JEST POLL():
+  Systemowe wywołanie które czeka na zdarzenia na wielu file descriptorach.
+  poll(fds, nfds, timeout) - blokuje do momentu gdy coś się wydarzy.
+
+STRUKTURA pollfd:
+  int fd       - deskryptor do monitorowania
+  short events - czego szukamy (POLLIN=dane do czytania, POLLOUT=gotowy do zapisu)
+  short revents - co faktycznie wystąpiło (wypełnia kernel)
+
+Server::_updatePollFds():
+  Buduje tablicę _pollfds przed każdym poll():
+  1. Dodaje listening sockety (events = POLLIN)
+  2. Dodaje sockety klientów:
+     - POLLIN jeśli stan = RECEIVING_REQUEST
+     - POLLOUT jeśli stan = SENDING_RESPONSE lub ma dane do wysłania
+  3. Dodaje CGI pipes:
+     - CGI input fd (events = POLLOUT) jeśli wysyłamy body
+     - CGI output fd (events = POLLIN) jeśli czytamy output
+
+Server::run():
+  while (_running) {
+    _updatePollFds();
+    int ret = poll(_pollfds.data(), _pollfds.size(), 1000);
+    if (ret > 0) _handlePollEvents();
+    _cleanupClosedClients();
+  }
+
+Server::_handlePollEvents():
+  Iteruje po _pollfds[] i sprawdza revents:
+  
+  WAŻNA ZASADA: JEDNA OPERACJA I/O NA KLIENTA NA ITERACJĘ
+  - Używa set<Client*> clientDidOneOp
+  - Jeśli klient już coś zrobił w tej iteracji - skip
+  - To zapewnia fairness (sprawiedliwość)
+  
+  Dla każdego fd z revents != 0:
+    - Listener socket + POLLIN → _acceptNewConnection()
+    - Client socket + POLLIN → client->receiveData()
+    - Client socket + POLLOUT → client->sendData()
+    - CGI input fd + POLLOUT → client->handleCgiInput()
+    - CGI output fd + POLLIN → client->handleCgiOutput()
+    - POLLERR/POLLHUP → close connection
+
+DLACZEGO JEDNA OPERACJA?
+  Żeby jeden klient z dużym transferem nie monopolizował CPU.
+  Każdy dostaje swoją kolej w każdej iteracji poll().
+
+═══════════════════════════════════════════════════════════════════════
+KROK 7 — CGI EXECUTION (FORK/EXEC)
+═══════════════════════════════════════════════════════════════════════
+
+PLIKI: src/CGI.cpp, include/CGI.hpp
+
+CO TO JEST CGI:
+  Common Gateway Interface - standard pozwalający serwerowi uruchamiać
+  zewnętrzne programy (Python, PHP, etc) i zwracać ich output jako HTTP response.
+
+POLA KLASY CGI:
+  _pid          - PID procesu child
+  _inputFd      - pipe do stdin CGI (parent pisze tutaj)
+  _outputFd     - pipe z stdout CGI (parent czyta stąd)
+  _isRunning    - czy proces działa
+  _scriptPath   - ścieżka do skryptu
+  _handler      - interpreter (/usr/bin/python3)
+  _outputBuffer - zbieramy tutaj output
+
+METODY:
+  execute(request, scriptPath, handler) - fork/exec pattern
+  writeToInput(data, len)     - wysyła dane do stdin CGI (non-blocking)
+  readFromOutput(buf, size)   - czyta z stdout CGI (non-blocking)
+  closeInput()                - zamyka stdin (wysyła EOF do CGI)
+  isRunning()                 - sprawdza waitpid(WNOHANG)
+  terminate()                 - kill proces
+
+CGI::execute():
+  1. pipe() x2 - tworzy input pipe i output pipe
+  2. fork() - tworzy proces child
+  3. CHILD:
+     - dup2() - przekierowuje stdin/stdout na pipe'y
+     - dup2() - stderr → /dev/null (lub debug file gdy WEBSERV_DEBUG_CGI)
+     - chdir() - zmienia katalog na katalog skryptu
+     - execve(handler, argv, envp) - wykonuje interpreter
+  4. PARENT:
+     - zamyka niepotrzebne końce pipes
+     - ustawia _inputFd i _outputFd non-blocking
+     - _isRunning = true
+
+ZMIENNE ŚRODOWISKOWE CGI (envp):
+  REQUEST_METHOD    - GET, POST, etc.
+  QUERY_STRING      - część URI po '?'
+  CONTENT_LENGTH    - długość body
+  CONTENT_TYPE      - typ body
+  SCRIPT_FILENAME   - pełna ścieżka do skryptu
+  SERVER_PROTOCOL   - HTTP/1.1
+  SERVER_SOFTWARE   - Webserv/1.0
+  HTTP_*            - wszystkie HTTP headers (np. HTTP_HOST, HTTP_USER_AGENT)
+
+LIFECYCLE:
+  1. Client::processRequest() wykrywa że to CGI
+  2. Tworzy new CGI()
+  3. Wywołuje cgi->execute()
+  4. Fork+exec → proces child zaczyna działać
+  5. Parent czeka na POLLOUT/POLLIN na pipe'ach
+  6. Wysyła body przez _inputFd (handleCgiInput)
+  7. Czyta output przez _outputFd (handleCgiOutput)
+  8. Gdy EOF na output → waitpid() → finalizeCgiResponse()
+
+═══════════════════════════════════════════════════════════════════════
+KROK 8 — CLIENT ↔ CGI FLOW
+═══════════════════════════════════════════════════════════════════════
+
+PLIKI: src/Client.cpp (metody handleCgiInput, handleCgiOutput, finalizeCgiResponse)
+
+Client::handleCgiInput():
+  - Wywoływane gdy POLLOUT na CGI input pipe
+  - Bierze fragment body z _request->getBody()
+  - Wywołuje _cgi->writeToInput()
+  - Jeśli EAGAIN - spróbuje ponownie przy następnym POLLOUT
+  - Gdy wszystko wysłane - _cgi->closeInput() (wysyła EOF)
+  - Zmienia stan na WAITING_CGI_OUTPUT
+
+Client::handleCgiOutput():
+  - Wywoływane gdy POLLIN na CGI output pipe
+  - Wywołuje _cgi->readFromOutput() - zbiera dane do _cgi->_outputBuffer
+  - Jeśli EOF (read zwrócił 0) - sprawdza czy proces się zakończył
+  - Gdy proces zakończony - wywołuje finalizeCgiResponse()
+
+Client::finalizeCgiResponse():
+  1. Bierze _cgi->getOutput() - cały output CGI
+  2. Szuka "\r\n\r\n" - separator nagłówków CGI i body
+  3. Parsuje nagłówki CGI:
+     - "Status: 404 Not Found" → ustawia status code
+     - "Content-Type: text/html" → dodaje header
+  4. Tworzy obiekt Response
+  5. Ustawia status, headery, body
+  6. Serializuje do _sendBuffer
+  7. Zmienia stan na SENDING_RESPONSE
+  8. Usuwa obiekt CGI
+
+OBSŁUGA BŁĘDÓW:
+  - CGI timeout (>30s) - terminate() + response 504 Gateway Timeout
+  - CGI exit code != 0 - response 500 Internal Server Error
+  - CGI nie zwrócił danych - response 500
+  - Błąd pipe - response 500
+
+WAŻNE:
+  Jedna operacja na klienta oznacza że w jednej iteracji poll():
+  - ALBO wysyłamy fragment do CGI
+  - ALBO czytamy fragment z CGI
+  - ALE NIE OBA
+
+═══════════════════════════════════════════════════════════════════════
+KROK 9 — FINALIZACJA I CLEANUP
+═══════════════════════════════════════════════════════════════════════
+
+PLIKI: src/Client.cpp (close, shouldClose), src/Server.cpp (_cleanupClosedClients)
+
+Client::close():
+  1. Zamyka socket (::close(_fd))
+  2. Jeśli jest CGI:
+     - Terminuje proces (kill)
+     - Zamyka pipe'y
+     - delete _cgi
+  3. Sprząta _request, _response
+  4. Ustawia _state = CLOSING
+
+Client::shouldClose():
+  Zwraca true gdy:
+  - _state == CLOSING
+  - Timeout (brak aktywności >60s)
+  - Peer zamknął (_peerClosed) i nie ma danych do wysłania
+  - Błąd socketu
+
+Server::_cleanupClosedClients():
+  - Iteruje po _clients
+  - Dla każdego klienta gdzie shouldClose() == true:
+    - Wywołuje client->close()
+    - delete client
+    - Usuwa z _clients map
+  - Wywoływane na końcu każdej iteracji run()
+
+GRACEFUL SHUTDOWN (Server::stop()):
+  1. Zamyka listening sockety
+  2. Pętla przez timeout (5s):
+     - Próbuje dokończyć wysyłanie danych do klientów
+     - Czyści zakończone połączenia
+  3. Po timeout - force close wszystkich
+  4. Zwalnia zasoby
+
+KEEP-ALIVE:
+  Gdy response wysłane całkowicie:
+  - Jeśli Connection: keep-alive:
+    - Reset bufory, _request, _response
+    - _state = RECEIVING_REQUEST
+    - Czeka na następne żądanie
+  - Jeśli nie:
+    - _state = CLOSING
+
+CUSTOM ERROR PAGES:
+  Gdy generujemy error response (404, 500, etc):
+  - Sprawdź config: error_page 404 /error_pages/404.html
+  - Jeśli istnieje - wczytaj i użyj jako body
+  - Jeśli nie - generuj domyślny HTML
+
+═══════════════════════════════════════════════════════════════════════
+KROK 10 — LOGGER I ZMIENNE ŚRODOWISKOWE
+═══════════════════════════════════════════════════════════════════════
+
+PLIKI: src/Logger.cpp, include/Logger.hpp
+
+KLASA LOGGER:
+  Statyczna klasa do logowania z poziomami: DEBUG, INFO, WARN, ERROR
+
+ZMIENNE ŚRODOWISKOWE (WAŻNE DLA EVAL):
+  WEBSERV_DEBUG=1           - włącza szczegółowe logi debug
+  WEBSERV_DEBUG_LOG_TO_FILE=1  - zapisuje logi do pliku
+  WEBSERV_DEBUG_CGI=1       - CGI stderr idzie do /tmp/cgi_stderr.log
+
+ZASADA:
+  W trybie produkcji (eval) wszystkie te zmienne muszą być wyłączone!
+  Nie wolno pisać do /tmp bez explicit env var.
+
+METODY:
+  Logger::init()         - czyta env vars, otwiera plik jeśli trzeba
+  Logger::debug(msg)     - tylko gdy WEBSERV_DEBUG=1
+  Logger::info(msg)      - zawsze
+  Logger::warn(msg)      - zawsze
+  Logger::error(msg)     - zawsze
+
+Format logu: [2024-12-06 15:30:45] [INFO] Message text
+
+═══════════════════════════════════════════════════════════════════════
+GDZIE CO JEST - QUICK REFERENCE
+═══════════════════════════════════════════════════════════════════════
+
+GŁÓWNA PĘTLA:
+  src/main.cpp → Server::start() → Server::run() (pętla poll)
+
+PRZYJMOWANIE POŁĄCZEŃ:
+  Server::_acceptNewConnection() tworzy new Client()
+
+CZYTANIE REQUESTU:
+  Client::receiveData() → Request::appendData() → Request::isComplete()
+
+ROUTING I DECYZJE:
+  Client::processRequest() używa Config::findLocation()
+  Decyduje: static file vs CGI vs upload vs error
+
+PLIKI STATYCZNE:
+  Client::_handleStaticFile() - czyta plik, buduje Response
+
+CGI:
+  Client::processRequest() → new CGI() → CGI::execute()
+  Client::handleCgiInput() → CGI::writeToInput()
+  Client::handleCgiOutput() → CGI::readFromOutput()
+  Client::finalizeCgiResponse() → parsuje output, buduje Response
+
+WYSYŁANIE ODPOWIEDZI:
+  Response::toBytes() → Client::_sendBuffer
+  Client::sendData() → write() do socketu
+
+CLEANUP:
+  Server::_cleanupClosedClients() → Client::close() → delete client
+
+═══════════════════════════════════════════════════════════════════════
+KLUCZOWE ZASADY (MUSISZ TO WIEDZIEĆ)
+═══════════════════════════════════════════════════════════════════════
+
+1. NON-BLOCKING I/O:
+   Wszystkie fd są O_NONBLOCK. read/write zwracają natychmiast.
+   EAGAIN = normalny stan, spróbuj później.
+
+2. JEDNA OPERACJA NA KLIENTA:
+   W jednej iteracji poll() każdy klient może zrobić max:
+   - 1x read LUB 1x write
+   To zapewnia fairness.
+
+3. ERRNO NIE STERUJE FLOW:
+   Sprawdzaj return value (>0, ==0, <0).
+   errno tylko do logowania.
+   NIE: if (errno == EAGAIN) return; else close();
+
+4. DEBUG GATED:
+   Wszystkie pliki debug tylko gdy env var ustawiona.
+   Eval = wszystko wyłączone.
+
+5. MEMORY MANAGEMENT:
+   Każdy new → delete w destruktorze lub cleanup.
+   Valgrind musi być clean.
+
+═══════════════════════════════════════════════════════════════════════
+TESTY PRZED EVAL (15 MINUT)
+═══════════════════════════════════════════════════════════════════════
+
+1. KOMPILACJA:
+   make clean && make
+   → brak błędów, ostrzeżeń
+
+2. URUCHOMIENIE:
+   ./webserv config/default.conf
+   → serwer startuje
+
+3. BASIC GET:
+   curl http://localhost:8080/
+   → 200 OK
+
+4. CGI GET:
+   curl http://localhost:8080/cgi-bin/hello.py
+   → 200 OK, output skryptu
+
+5. CGI POST:
+   echo "test=123" | curl --data-binary @- http://localhost:8080/cgi-bin/form.py
+   → 200 OK, parsed data
+
+6. 404:
+   curl http://localhost:8080/nieistniejacy
+   → 404 Not Found
+
+7. STRESS:
+   siege -c 20 -t 10s http://localhost:8080/
+   → brak błędów
+
+8. VALGRIND:
+   valgrind ./webserv config.conf
+   curl http://localhost:8080/
+   Ctrl+C na serverze
+   → 0 definitely lost
+
+9. SPRAWDŹ /tmp:
+   unset WEBSERV_DEBUG WEBSERV_DEBUG_CGI WEBSERV_DEBUG_LOG_TO_FILE
+   ./webserv config.conf
+   curl http://localhost:8080/cgi-bin/test.py
+   ls /tmp/*.log
+   → żadnych plików (lub tylko te dozwolone przez subject)
+
+═══════════════════════════════════════════════════════════════════════
+KONIEC - TO WSZYSTKO CZEGO POTRZEBUJESZ
+═══════════════════════════════════════════════════════════════════════
